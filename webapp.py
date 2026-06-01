@@ -1686,6 +1686,7 @@ async def chat(request: Request):
                 num_ctx=chosen_ctx,
                 temperature=0.3 if is_feedback_turn else 0.5,
                 timeout=600,
+                for_feedback=is_feedback_turn,
             ):
                 if not piece:
                     continue
