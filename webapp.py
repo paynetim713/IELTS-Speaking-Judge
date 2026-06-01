@@ -1115,14 +1115,217 @@ async def submit_feedback(request: Request):
     return {"ok": True}
 
 
+# ── Admin panel (separate session flag so users + admin coexist) ──────────
+# Gate: knowing the ADMIN_FEEDBACK_TOKEN env var. After POST /api/admin/login
+# the cookie carries `is_admin=true` and all /api/admin/* routes accept the
+# request. /api/feedback (legacy query-token GET) still works for direct curl.
+
+def _admin_token() -> str:
+    return os.environ.get("ADMIN_FEEDBACK_TOKEN") or ""
+
+
+def _require_admin(request: Request):
+    if not request.session.get("is_admin"):
+        raise HTTPException(401, "admin_required")
+
+
+@app.get("/admin")
+def admin_page():
+    return FileResponse(HERE / "admin.html")
+
+
+@app.post("/api/admin/login")
+async def admin_login(request: Request):
+    body = await request.json()
+    token = (body.get("token") or "").strip()
+    expected = _admin_token()
+    if not expected:
+        # In prod with no token set, refuse — admin disabled by config.
+        if IS_PROD:
+            raise HTTPException(503, "admin_not_configured")
+        # In dev, accept empty if env is empty.
+        if not token:
+            request.session["is_admin"] = True
+            return {"ok": True}
+    if not secrets.compare_digest(token, expected):
+        # Small artificial delay to slow brute-forcing
+        time.sleep(0.5)
+        raise HTTPException(401, "bad_token")
+    request.session["is_admin"] = True
+    return {"ok": True}
+
+
+@app.post("/api/admin/logout")
+async def admin_logout(request: Request):
+    request.session.pop("is_admin", None)
+    return {"ok": True}
+
+
+@app.get("/api/admin/whoami")
+def admin_whoami(request: Request):
+    return {"is_admin": bool(request.session.get("is_admin"))}
+
+
+@app.get("/api/admin/overview")
+def admin_overview(request: Request):
+    _require_admin(request)
+    now = time.time()
+    day = 86400.0
+    with _db() as c:
+        def n(sql: str, params=()):
+            return c.execute(sql, params).fetchone()["n"]
+        users_total       = n("SELECT COUNT(*) AS n FROM users")
+        users_today       = n("SELECT COUNT(*) AS n FROM users WHERE created_at > ?", (now - day,))
+        users_7d          = n("SELECT COUNT(*) AS n FROM users WHERE created_at > ?", (now - 7 * day,))
+        sessions_total    = n("SELECT COUNT(*) AS n FROM sessions")
+        sessions_complete = n("SELECT COUNT(*) AS n FROM sessions WHERE status = 'complete'")
+        sessions_active_24h = n("SELECT COUNT(*) AS n FROM sessions WHERE updated_at > ?", (now - day,))
+        feedback_total    = n("SELECT COUNT(*) AS n FROM feedback")
+        feedback_unread   = n("SELECT COUNT(*) AS n FROM feedback WHERE resolved = 0")
+        # Latest 5 of each, lightweight
+        latest_users = [
+            {"id": r["id"], "phone": r["phone"], "name": r["name"], "created_at": r["created_at"]}
+            for r in c.execute(
+                "SELECT id, phone, name, created_at FROM users ORDER BY created_at DESC LIMIT 5"
+            ).fetchall()
+        ]
+        latest_sessions = [
+            {"id": r["id"], "user_id": r["user_id"], "status": r["status"],
+             "phase": r["phase"], "updated_at": r["updated_at"]}
+            for r in c.execute(
+                "SELECT id, user_id, status, phase, updated_at FROM sessions "
+                "ORDER BY updated_at DESC LIMIT 5"
+            ).fetchall()
+        ]
+        latest_feedback = [
+            {"id": r["id"], "rating": r["rating"], "category": r["category"],
+             "text": r["text"][:140], "created_at": r["created_at"]}
+            for r in c.execute(
+                "SELECT id, rating, category, text, created_at FROM feedback "
+                "ORDER BY created_at DESC LIMIT 5"
+            ).fetchall()
+        ]
+    return {
+        "users":    {"total": users_total, "today": users_today, "last_7d": users_7d},
+        "sessions": {"total": sessions_total, "complete": sessions_complete, "active_24h": sessions_active_24h},
+        "feedback": {"total": feedback_total, "unread": feedback_unread},
+        "latest_users":    latest_users,
+        "latest_sessions": latest_sessions,
+        "latest_feedback": latest_feedback,
+    }
+
+
+@app.get("/api/admin/users")
+def admin_users(request: Request, limit: int = 200, q: str = ""):
+    _require_admin(request)
+    limit = max(1, min(int(limit or 200), 1000))
+    q = (q or "").strip()
+    with _db() as c:
+        if q:
+            like = f"%{q}%"
+            cur = c.execute(
+                "SELECT id, phone, name, target_band, accent, preferred_topic, created_at, "
+                "       invite_code, referred_by "
+                "FROM users WHERE phone LIKE ? OR name LIKE ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (like, like, limit),
+            )
+        else:
+            cur = c.execute(
+                "SELECT id, phone, name, target_band, accent, preferred_topic, created_at, "
+                "       invite_code, referred_by "
+                "FROM users ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            )
+        users = [dict(r) for r in cur.fetchall()]
+        # Augment with invite_count + session_count + last_active
+        for u in users:
+            uid = u["id"]
+            u["invite_count"] = c.execute(
+                "SELECT COUNT(*) AS n FROM users WHERE referred_by = ?", (uid,)
+            ).fetchone()["n"]
+            srow = c.execute(
+                "SELECT COUNT(*) AS n, MAX(updated_at) AS last "
+                "FROM sessions WHERE user_id = ?", (uid,)
+            ).fetchone()
+            u["session_count"] = srow["n"]
+            u["last_active"]   = srow["last"]
+    return {"count": len(users), "items": users}
+
+
+@app.get("/api/admin/sessions")
+def admin_sessions(request: Request, limit: int = 100, user_id: int | None = None,
+                   status: str = ""):
+    _require_admin(request)
+    limit = max(1, min(int(limit or 100), 500))
+    clauses = []
+    params = []
+    if user_id:
+        clauses.append("s.user_id = ?")
+        params.append(int(user_id))
+    if status in ("active", "complete"):
+        clauses.append("s.status = ?")
+        params.append(status)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    sql = (
+        "SELECT s.id, s.user_id, s.created_at, s.updated_at, s.status, s.phase, "
+        "       s.target_band, s.p1_topic, s.feedback, u.phone, u.name "
+        "FROM sessions s LEFT JOIN users u ON u.id = s.user_id "
+        f"{where} "
+        "ORDER BY s.updated_at DESC LIMIT ?"
+    )
+    params.append(limit)
+    with _db() as c:
+        rows = c.execute(sql, tuple(params)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["band"] = _extract_band(d.pop("feedback", None))
+        out.append(d)
+    return {"count": len(out), "items": out}
+
+
+@app.get("/api/admin/feedback")
+def admin_feedback(request: Request, limit: int = 200, only_unread: bool = False):
+    _require_admin(request)
+    limit = max(1, min(int(limit or 200), 1000))
+    sql = (
+        "SELECT f.id, f.user_id, f.created_at, f.rating, f.category, f.text, "
+        "       f.contact, f.user_agent, f.url, f.resolved, u.phone, u.name "
+        "FROM feedback f LEFT JOIN users u ON u.id = f.user_id "
+    )
+    if only_unread:
+        sql += "WHERE f.resolved = 0 "
+    sql += "ORDER BY f.created_at DESC LIMIT ?"
+    with _db() as c:
+        rows = c.execute(sql, (limit,)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["resolved"] = bool(d.get("resolved"))
+        out.append(d)
+    return {"count": len(out), "items": out}
+
+
+@app.post("/api/admin/feedback/{fb_id}/resolve")
+async def admin_resolve_feedback(fb_id: int, request: Request):
+    _require_admin(request)
+    body = await request.json() if request.headers.get("content-length") else {}
+    resolved = bool(body.get("resolved", True))
+    with _db() as c:
+        c.execute("UPDATE feedback SET resolved = ? WHERE id = ?", (1 if resolved else 0, fb_id))
+    return {"ok": True, "resolved": resolved}
+
+
 @app.get("/api/feedback")
-def list_feedback(token: str = "", limit: int = 100):
-    """Admin-only: list all feedback. Auth via ?token=... query param matching
-    ADMIN_FEEDBACK_TOKEN env. Locally (dev), defaults to allowing the empty token."""
-    admin_token = os.environ.get("ADMIN_FEEDBACK_TOKEN") or ""
-    if IS_PROD and not admin_token:
+def list_feedback_legacy(token: str = "", limit: int = 100):
+    """Legacy: direct curl/JSON access via ?token=... query param. Kept so a
+    monitoring script can poll feedback without going through the cookie-based
+    admin session."""
+    expected = _admin_token()
+    if IS_PROD and not expected:
         raise HTTPException(503, "feedback_admin_not_configured")
-    if admin_token and token != admin_token:
+    if expected and not secrets.compare_digest(token, expected):
         raise HTTPException(401, "bad_token")
     limit = max(1, min(int(limit or 100), 500))
     with _db() as c:
@@ -1132,24 +1335,9 @@ def list_feedback(token: str = "", limit: int = 100):
             (limit,),
         )
         rows = cur.fetchall()
-    return {
-        "count": len(rows),
-        "items": [
-            {
-                "id": r["id"],
-                "user_id": r["user_id"],
-                "created_at": r["created_at"],
-                "rating": r["rating"],
-                "category": r["category"],
-                "text": r["text"],
-                "contact": r["contact"],
-                "user_agent": r["user_agent"],
-                "url": r["url"],
-                "resolved": bool(r["resolved"]),
-            }
-            for r in rows
-        ],
-    }
+    return {"count": len(rows), "items": [
+        {**dict(r), "resolved": bool(r["resolved"])} for r in rows
+    ]}
 
 
 # ── Server-side TTS (Microsoft Edge neural voices, free, no key) ──────────

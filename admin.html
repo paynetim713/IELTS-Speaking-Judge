@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin · IELTS Speaking Judge</title>
+<style>
+:root {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface-2: #1a1a1a;
+  --border: #262626;
+  --fg: #fafafa;
+  --fg-muted: #9aa;
+  --accent: #4a8fff;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  min-height: 100vh;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ───── Login ───── */
+.login-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.login-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 36px 32px; max-width: 380px; width: 100%;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+}
+.login-card h1 { margin: 0 0 6px; font-size: 22px; }
+.login-sub { color: var(--fg-muted); margin-bottom: 24px; font-size: 13px; }
+.login-card input {
+  width: 100%; padding: 11px 13px; background: var(--surface-2);
+  border: 1px solid var(--border); color: var(--fg);
+  border-radius: 8px; font-size: 14px; font-family: monospace;
+}
+.login-card input:focus { outline: none; border-color: var(--accent); }
+.login-card button {
+  width: 100%; margin-top: 14px; padding: 11px;
+  background: var(--accent); color: #fff; border: none;
+  border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.login-card button:hover { background: #1d4ed8; }
+.login-card button:disabled { opacity: 0.5; }
+.login-err {
+  margin-top: 12px; padding: 10px 12px; background: rgba(239, 68, 68, 0.1);
+  color: var(--danger); border-radius: 6px; font-size: 12px;
+}
+
+/* ───── App shell ───── */
+.app { display: none; }
+.app.active { display: block; }
+.topbar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 14px 24px; display: flex; align-items: center; gap: 24px;
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar .brand { font-weight: 700; font-size: 16px; }
+.topbar nav { display: flex; gap: 4px; }
+.topbar nav button {
+  background: transparent; color: var(--fg-muted); border: none;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 14px;
+}
+.topbar nav button:hover { color: var(--fg); background: var(--surface-2); }
+.topbar nav button.active { color: var(--fg); background: var(--surface-2); }
+.topbar .spacer { flex: 1; }
+.topbar .logout {
+  background: transparent; color: var(--fg-muted); border: 1px solid var(--border);
+  padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.topbar .logout:hover { color: var(--fg); border-color: var(--fg-muted); }
+
+main {
+  max-width: 1200px; margin: 0 auto; padding: 28px 24px;
+}
+h2 { font-size: 18px; margin: 0 0 16px; font-weight: 600; }
+
+/* ───── Stat cards ───── */
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px; margin-bottom: 28px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 18px;
+}
+.stat-card .label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--fg-muted); margin-bottom: 6px;
+}
+.stat-card .num {
+  font-size: 30px; font-weight: 700; line-height: 1.1;
+}
+.stat-card .sub {
+  font-size: 12px; color: var(--fg-muted); margin-top: 4px;
+}
+.stat-card .sub.up { color: var(--ok); }
+.stat-card .sub.warn { color: var(--warn); }
+
+/* ───── Tables ───── */
+.section { margin-bottom: 32px; }
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.section-head h3 { margin: 0; font-size: 14px; color: var(--fg-muted); font-weight: 500; }
+.search-bar {
+  display: flex; gap: 8px; margin-bottom: 14px;
+}
+.search-bar input {
+  flex: 1; padding: 8px 12px; background: var(--surface);
+  border: 1px solid var(--border); color: var(--fg);
+  border-radius: 6px; font-size: 13px;
+}
+.search-bar input:focus { outline: none; border-color: var(--accent); }
+.search-bar select {
+  padding: 8px 12px; background: var(--surface);
+  border: 1px solid var(--border); color: var(--fg);
+  border-radius: 6px; font-size: 13px;
+}
+.table {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+}
+.table table { width: 100%; border-collapse: collapse; }
+.table th {
+  text-align: left; padding: 10px 14px; background: var(--surface-2);
+  font-size: 11px; color: var(--fg-muted); text-transform: uppercase;
+  letter-spacing: 0.5px; font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.table td {
+  padding: 11px 14px; border-bottom: 1px solid var(--border);
+  font-size: 13px; vertical-align: top;
+}
+.table tr:last-child td { border-bottom: none; }
+.table tr:hover td { background: var(--surface-2); }
+.muted { color: var(--fg-muted); }
+.tag {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 500;
+}
+.tag.bug { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+.tag.suggestion { background: rgba(74, 143, 255, 0.15); color: var(--accent); }
+.tag.praise { background: rgba(34, 197, 94, 0.15); color: var(--ok); }
+.tag.general { background: rgba(245, 158, 11, 0.15); color: var(--warn); }
+.tag.complete { background: rgba(34, 197, 94, 0.15); color: var(--ok); }
+.tag.active { background: rgba(74, 143, 255, 0.15); color: var(--accent); }
+.tag.resolved { background: rgba(115, 115, 115, 0.2); color: var(--fg-muted); }
+.tag.unread { background: rgba(245, 158, 11, 0.15); color: var(--warn); }
+.btn-small {
+  background: transparent; border: 1px solid var(--border); color: var(--fg-muted);
+  padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;
+}
+.btn-small:hover { color: var(--fg); border-color: var(--fg-muted); }
+.feedback-text { max-width: 480px; }
+.empty {
+  padding: 40px 20px; text-align: center; color: var(--fg-muted);
+  font-style: italic;
+}
+.stars-tag { color: #f0b400; letter-spacing: 1px; }
+.copy-btn {
+  background: transparent; border: none; color: var(--accent);
+  cursor: pointer; font-size: 12px; padding: 2px 6px;
+}
+.copy-btn:hover { text-decoration: underline; }
+.kbd {
+  font-family: monospace; background: var(--surface-2);
+  padding: 1px 5px; border-radius: 3px; font-size: 11px;
+  color: var(--fg-muted);
+}
+@media (max-width: 700px) {
+  .topbar { flex-wrap: wrap; padding: 12px 14px; gap: 10px; }
+  .topbar nav { flex-wrap: wrap; }
+  main { padding: 18px 14px; }
+  .table { overflow-x: auto; }
+  .table table { min-width: 600px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ───── Login ───── -->
+<div id="loginWrap" class="login-wrap">
+  <div class="login-card">
+    <h1>Admin</h1>
+    <div class="login-sub">Enter your <span class="kbd">ADMIN_FEEDBACK_TOKEN</span> to continue.</div>
+    <form id="loginForm">
+      <input type="password" id="tokenInput" placeholder="Token" autofocus required>
+      <button type="submit" id="loginBtn">Sign in</button>
+      <div id="loginErr" class="login-err" style="display:none"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ───── App ───── -->
+<div id="app" class="app">
+  <div class="topbar">
+    <div class="brand">⚙️ Admin Panel</div>
+    <nav>
+      <button data-tab="overview" class="active">Overview</button>
+      <button data-tab="users">Users</button>
+      <button data-tab="feedback">Feedback <span id="fbBadge"></span></button>
+      <button data-tab="sessions">Sessions</button>
+    </nav>
+    <div class="spacer"></div>
+    <button class="logout" id="logoutBtn">Sign out</button>
+  </div>
+
+  <main id="content"></main>
+</div>
+
+<script>
+// ───── Auth ─────
+const loginWrap = document.getElementById('loginWrap');
+const app = document.getElementById('app');
+const loginForm = document.getElementById('loginForm');
+const tokenInput = document.getElementById('tokenInput');
+const loginBtn = document.getElementById('loginBtn');
+const loginErr = document.getElementById('loginErr');
+
+async function checkAuth() {
+  try {
+    const r = await fetch('/api/admin/whoami', { credentials: 'same-origin' });
+    const d = await r.json();
+    return d.is_admin;
+  } catch (_) { return false; }
+}
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  loginErr.style.display = 'none';
+  loginBtn.disabled = true;
+  try {
+    const r = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: tokenInput.value }),
+      credentials: 'same-origin',
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || 'Login failed');
+    }
+    enterApp();
+  } catch (e) {
+    loginErr.textContent = e.message === 'bad_token' ? 'Wrong token. Try again.'
+                          : e.message === 'admin_not_configured' ? 'Admin panel not configured on server.'
+                          : e.message;
+    loginErr.style.display = 'block';
+  } finally {
+    loginBtn.disabled = false;
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' });
+  location.reload();
+});
+
+function enterApp() {
+  loginWrap.style.display = 'none';
+  app.classList.add('active');
+  initTabs();
+  showTab('overview');
+}
+
+// ───── Tabs ─────
+function initTabs() {
+  document.querySelectorAll('.topbar nav button').forEach(b => {
+    b.addEventListener('click', () => showTab(b.dataset.tab));
+  });
+}
+function showTab(name) {
+  document.querySelectorAll('.topbar nav button').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="empty">Loading…</div>';
+  if (name === 'overview') return renderOverview();
+  if (name === 'users')    return renderUsers();
+  if (name === 'feedback') return renderFeedback();
+  if (name === 'sessions') return renderSessions();
+}
+
+// ───── Helpers ─────
+function fmtTime(unix) {
+  if (!unix) return '—';
+  const d = new Date(unix * 1000);
+  const pad = n => (n < 10 ? '0' + n : n);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
+       + `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function fmtRelative(unix) {
+  if (!unix) return '—';
+  const diff = (Date.now() / 1000) - unix;
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd ago';
+  return fmtTime(unix);
+}
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function stars(n) {
+  if (!n) return '<span class="muted">—</span>';
+  return '<span class="stars-tag">' + '★'.repeat(n) + '<span class="muted">' + '★'.repeat(5 - n) + '</span></span>';
+}
+async function api(path, opts) {
+  const r = await fetch(path, { credentials: 'same-origin', ...(opts || {}) });
+  if (r.status === 401) { location.reload(); throw new Error('not_admin'); }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function copy(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const t = document.createElement('textarea');
+    t.value = text;
+    document.body.appendChild(t);
+    t.select();
+    document.execCommand('copy');
+    t.remove();
+  }
+}
+
+// ───── Overview ─────
+async function renderOverview() {
+  let d;
+  try { d = await api('/api/admin/overview'); }
+  catch (e) { document.getElementById('content').innerHTML = '<div class="empty">Failed: ' + esc(e.message) + '</div>'; return; }
+
+  document.getElementById('fbBadge').textContent = d.feedback.unread > 0 ? ' (' + d.feedback.unread + ')' : '';
+
+  const html = `
+    <div class="stats">
+      <div class="stat-card">
+        <div class="label">Users total</div>
+        <div class="num">${d.users.total}</div>
+        <div class="sub up">+${d.users.today} today · +${d.users.last_7d} this week</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Sessions</div>
+        <div class="num">${d.sessions.total}</div>
+        <div class="sub">${d.sessions.complete} completed · ${d.sessions.active_24h} active 24h</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Feedback</div>
+        <div class="num">${d.feedback.total}</div>
+        <div class="sub ${d.feedback.unread ? 'warn' : ''}">${d.feedback.unread} unread</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Completion rate</div>
+        <div class="num">${d.sessions.total ? Math.round(100 * d.sessions.complete / d.sessions.total) : 0}%</div>
+        <div class="sub">of all sessions</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h3>Latest signups</h3></div>
+      <div class="table">
+        <table><thead><tr><th>ID</th><th>Phone</th><th>Name</th><th>When</th></tr></thead>
+        <tbody>
+          ${d.latest_users.map(u => `
+            <tr>
+              <td>${u.id}</td>
+              <td>${esc(u.phone)}</td>
+              <td>${esc(u.name || '')}</td>
+              <td class="muted">${fmtRelative(u.created_at)}</td>
+            </tr>`).join('') || '<tr><td colspan="4" class="empty">No users yet</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h3>Latest sessions</h3></div>
+      <div class="table">
+        <table><thead><tr><th>ID</th><th>User</th><th>Status</th><th>Phase</th><th>Updated</th></tr></thead>
+        <tbody>
+          ${d.latest_sessions.map(s => `
+            <tr>
+              <td><code>${esc(s.id.slice(0, 8))}…</code></td>
+              <td>${s.user_id || '<span class="muted">anon</span>'}</td>
+              <td><span class="tag ${s.status}">${esc(s.status)}</span></td>
+              <td class="muted">${esc(s.phase)}</td>
+              <td class="muted">${fmtRelative(s.updated_at)}</td>
+            </tr>`).join('') || '<tr><td colspan="5" class="empty">No sessions yet</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h3>Latest feedback</h3></div>
+      <div class="table">
+        <table><thead><tr><th>Rating</th><th>Type</th><th>Text</th><th>When</th></tr></thead>
+        <tbody>
+          ${d.latest_feedback.map(f => `
+            <tr>
+              <td>${stars(f.rating)}</td>
+              <td><span class="tag ${f.category}">${esc(f.category)}</span></td>
+              <td class="feedback-text">${esc(f.text)}</td>
+              <td class="muted">${fmtRelative(f.created_at)}</td>
+            </tr>`).join('') || '<tr><td colspan="4" class="empty">No feedback yet</td></tr>'}
+        </tbody></table>
+      </div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+
+// ───── Users ─────
+let _userSearch = '';
+async function renderUsers() {
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <h2>Users</h2>
+    <div class="search-bar">
+      <input id="userSearch" type="text" placeholder="Search by phone or name…" value="${esc(_userSearch)}">
+    </div>
+    <div id="userTable"><div class="empty">Loading…</div></div>
+  `;
+  document.getElementById('userSearch').addEventListener('input', (e) => {
+    _userSearch = e.target.value;
+    clearTimeout(window._userSearchT);
+    window._userSearchT = setTimeout(loadUsers, 250);
+  });
+  loadUsers();
+}
+async function loadUsers() {
+  let d;
+  try { d = await api('/api/admin/users?q=' + encodeURIComponent(_userSearch)); }
+  catch (e) { document.getElementById('userTable').innerHTML = '<div class="empty">Failed: ' + esc(e.message) + '</div>'; return; }
+  document.getElementById('userTable').innerHTML = `
+    <div class="table">
+      <table><thead><tr>
+        <th>ID</th><th>Phone</th><th>Name</th><th>Target</th><th>Sessions</th>
+        <th>Invites</th><th>Code</th><th>Joined</th><th>Last active</th>
+      </tr></thead><tbody>
+      ${d.items.length ? d.items.map(u => `
+        <tr>
+          <td>${u.id}</td>
+          <td><code>${esc(u.phone)}</code></td>
+          <td>${esc(u.name || '')}</td>
+          <td class="muted">${esc(u.target_band || '')}</td>
+          <td>${u.session_count || 0}</td>
+          <td>${u.invite_count || 0}</td>
+          <td><code class="muted">${esc(u.invite_code || '')}</code></td>
+          <td class="muted">${fmtRelative(u.created_at)}</td>
+          <td class="muted">${fmtRelative(u.last_active)}</td>
+        </tr>`).join('') : '<tr><td colspan="9" class="empty">No users match</td></tr>'}
+      </tbody></table>
+    </div>
+    <div class="muted" style="margin-top:8px;font-size:12px;">${d.count} users shown</div>
+  `;
+}
+
+// ───── Feedback ─────
+let _fbOnlyUnread = false;
+async function renderFeedback() {
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <h2>Feedback</h2>
+    <div class="search-bar">
+      <select id="fbFilter">
+        <option value="all">All</option>
+        <option value="unread" ${_fbOnlyUnread ? 'selected' : ''}>Unread only</option>
+      </select>
+    </div>
+    <div id="fbTable"><div class="empty">Loading…</div></div>
+  `;
+  document.getElementById('fbFilter').addEventListener('change', (e) => {
+    _fbOnlyUnread = e.target.value === 'unread';
+    loadFeedback();
+  });
+  loadFeedback();
+}
+async function loadFeedback() {
+  let d;
+  try { d = await api('/api/admin/feedback?only_unread=' + (_fbOnlyUnread ? 'true' : 'false')); }
+  catch (e) { document.getElementById('fbTable').innerHTML = '<div class="empty">Failed: ' + esc(e.message) + '</div>'; return; }
+  // Update badge in topbar
+  const unreadCount = d.items.filter(f => !f.resolved).length;
+  document.getElementById('fbBadge').textContent = unreadCount > 0 && !_fbOnlyUnread ? ' (' + unreadCount + ')' : '';
+  document.getElementById('fbTable').innerHTML = `
+    <div class="table">
+      <table><thead><tr>
+        <th>★</th><th>Type</th><th>Message</th><th>User</th><th>Contact</th><th>When</th><th></th>
+      </tr></thead><tbody>
+      ${d.items.length ? d.items.map(f => `
+        <tr style="${f.resolved ? 'opacity:0.55;' : ''}">
+          <td>${stars(f.rating)}</td>
+          <td><span class="tag ${f.category}">${esc(f.category)}</span></td>
+          <td class="feedback-text">${esc(f.text)}</td>
+          <td>
+            ${f.user_id ? '<code>' + f.user_id + '</code><br><span class="muted">' + esc(f.phone || '') + '</span>' : '<span class="muted">anonymous</span>'}
+          </td>
+          <td>
+            ${f.contact ? '<span style="word-break:break-all;">' + esc(f.contact) + '</span> <button class="copy-btn" data-copy="' + esc(f.contact) + '">copy</button>' : '<span class="muted">—</span>'}
+          </td>
+          <td class="muted" style="white-space:nowrap;">${fmtRelative(f.created_at)}</td>
+          <td>
+            <button class="btn-small" data-resolve="${f.id}" data-state="${f.resolved ? 'unresolve' : 'resolve'}">
+              ${f.resolved ? '↺ unread' : '✓ mark read'}
+            </button>
+          </td>
+        </tr>`).join('') : '<tr><td colspan="7" class="empty">No feedback yet</td></tr>'}
+      </tbody></table>
+    </div>
+  `;
+  document.querySelectorAll('button[data-resolve]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const id = b.dataset.resolve;
+      const setResolved = b.dataset.state === 'resolve';
+      await api('/api/admin/feedback/' + id + '/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolved: setResolved }),
+      });
+      loadFeedback();
+    });
+  });
+  document.querySelectorAll('.copy-btn[data-copy]').forEach(b => {
+    b.addEventListener('click', async () => {
+      await copy(b.dataset.copy);
+      const orig = b.textContent;
+      b.textContent = 'copied!';
+      setTimeout(() => b.textContent = orig, 1200);
+    });
+  });
+}
+
+// ───── Sessions ─────
+let _sessFilter = '';
+async function renderSessions() {
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <h2>Sessions</h2>
+    <div class="search-bar">
+      <select id="sessFilter">
+        <option value="">All</option>
+        <option value="active" ${_sessFilter === 'active' ? 'selected' : ''}>Active</option>
+        <option value="complete" ${_sessFilter === 'complete' ? 'selected' : ''}>Complete</option>
+      </select>
+    </div>
+    <div id="sessTable"><div class="empty">Loading…</div></div>
+  `;
+  document.getElementById('sessFilter').addEventListener('change', (e) => {
+    _sessFilter = e.target.value;
+    loadSessions();
+  });
+  loadSessions();
+}
+async function loadSessions() {
+  let d;
+  try { d = await api('/api/admin/sessions?status=' + encodeURIComponent(_sessFilter)); }
+  catch (e) { document.getElementById('sessTable').innerHTML = '<div class="empty">Failed: ' + esc(e.message) + '</div>'; return; }
+  document.getElementById('sessTable').innerHTML = `
+    <div class="table">
+      <table><thead><tr>
+        <th>Session</th><th>User</th><th>Status</th><th>Phase</th>
+        <th>Topic</th><th>Target</th><th>Band</th><th>Updated</th>
+      </tr></thead><tbody>
+      ${d.items.length ? d.items.map(s => `
+        <tr>
+          <td><code>${esc(s.id.slice(0, 8))}…</code></td>
+          <td>${s.user_id || '<span class="muted">anon</span>'}<br><span class="muted">${esc(s.phone || '')}</span></td>
+          <td><span class="tag ${s.status}">${esc(s.status)}</span></td>
+          <td class="muted">${esc(s.phase)}</td>
+          <td class="muted">${esc(s.p1_topic || '')}</td>
+          <td class="muted">${esc(s.target_band || '')}</td>
+          <td>${s.band != null ? '<b>' + s.band + '</b>' : '<span class="muted">—</span>'}</td>
+          <td class="muted">${fmtRelative(s.updated_at)}</td>
+        </tr>`).join('') : '<tr><td colspan="8" class="empty">No sessions match</td></tr>'}
+      </tbody></table>
+    </div>
+    <div class="muted" style="margin-top:8px;font-size:12px;">${d.count} sessions shown</div>
+  `;
+}
+
+// ───── Boot ─────
+(async () => {
+  if (await checkAuth()) enterApp();
+})();
+</script>
+</body>
+</html>
