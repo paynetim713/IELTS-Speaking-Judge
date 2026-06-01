@@ -834,7 +834,7 @@ def is_feedback_trigger(text: str) -> bool:
     return low in triggers
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def index():
     return FileResponse(HERE / "index.html")
 
@@ -998,9 +998,9 @@ def _topic_sort_key(slug: str):
     return (0, 0, slug)
 
 
-@app.get("/healthz")
+@app.api_route("/healthz", methods=["GET", "HEAD"])
 def healthz():
-    """Health check for Render. Doesn't touch the DB or LLM — must answer fast."""
+    # Must not touch DB or LLM — has to answer fast even under load.
     return {
         "status": "ok",
         "env": IELTS_ENV,
