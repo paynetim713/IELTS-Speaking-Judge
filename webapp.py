@@ -737,14 +737,15 @@ def phase_label(history: list) -> str:
 
 
 def phase_hint(history: list, sid: str = None, p1_topic: str = None,
-               target_band: str = None) -> str:
+               target_band: str = None, force_phase: str = None) -> str:
     """Return a one-line stage-direction for the examiner's upcoming turn.
 
     Server-driven: Part 1 topic, Part 2 cue card, and Part 3 sub-themes are all
-    picked from curated banks (deterministic per session id) so the 7B can't
-    drift off-topic or hallucinate a different cue card.
+    picked from curated banks (deterministic per session id) so the model can't
+    drift off-topic or hallucinate a different cue card. force_phase=feedback
+    bypasses natural progression and jumps straight to the scoring prompt.
     """
-    upcoming = phase_label(history)
+    upcoming = force_phase or phase_label(history)
     phases = derive_phases(history)
     variety = _prev_examiner_openers(history, 3)
     variety_hint = (
@@ -1644,8 +1645,14 @@ async def chat(request: Request):
 
     last_user = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
     if is_feedback_trigger(last_user):
-        hint = "Phase=END. The candidate asked for feedback. Output the Chinese feedback report now."
+        # User-triggered feedback still needs the full band-anchored prompt
+        # (transcript + descriptors + Chinese template). The one-liner here
+        # was leaving DeepSeek/Llama to invent their own feedback format.
         label = "feedback"
+        hint = phase_hint(history, sid=sid,
+                          p1_topic=sess.get("p1_topic"),
+                          target_band=sess.get("target_band"),
+                          force_phase="feedback")
     elif _has_chinese(last_user):
         # Don't advance the test — re-prompt in English and keep phase as-is.
         label = phase_label(history)
