@@ -1,0 +1,69 @@
+name: sanity
+
+# A minimal CI: install deps, byte-compile the modules, run the
+# question-bank build deterministically. Catches accidental syntax errors,
+# bad imports, and bank-schema regressions on every push.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Byte-compile (catch SyntaxError)
+        run: python -m compileall -q webapp.py llm_provider.py db.py question_bank.py build_bank.py
+
+      - name: Import smoke test (default sqlite/ollama)
+        run: |
+          python -c "
+          import sys, importlib
+          sys.path.insert(0, '.')
+          for m in ('question_bank', 'llm_provider', 'db'):
+              importlib.import_module(m)
+              print(f'✓ {m}')
+          import webapp
+          print(f'✓ webapp ({len(webapp.PART1_BANK)} P1, {len(webapp.PART2_BANK)} P2, {len(webapp.PART3_THEMES)} P3)')
+          "
+
+      - name: Import smoke test (prod simulation — groq/postgres-url)
+        env:
+          IELTS_ENV: prod
+          IELTS_SECRET_KEY: ci-fake-secret-key-32-hex
+          LLM_PROVIDER: groq
+          GROQ_API_KEY: ci-fake-key
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          import webapp
+          assert webapp.IS_PROD
+          assert webapp.llm_provider.PROVIDER == 'groq'
+          assert webapp.MODEL_NAME == 'llama-3.3-70b-versatile'
+          print('✓ prod boot OK')
+          "
+
+      - name: Rebuild the question bank (must be deterministic)
+        run: |
+          python build_bank.py
+          # No git diff allowed — the checked-in question_bank.py must equal the rebuild output.
+          if ! git diff --quiet question_bank.py; then
+            echo "ERROR: question_bank.py is out of sync with sources. Run 'python build_bank.py' locally and commit."
+            git diff question_bank.py | head -50
+            exit 1
+          fi
+          echo "✓ question_bank.py is reproducible from cambridge_manual.json"
