@@ -4,12 +4,12 @@
   <strong>在浏览器里练 IELTS Speaking：AI 考官、真实考试节奏、结束后给出可修改的口语反馈。</strong>
 </p>
 
-<h3 align="center">选择语言</h3>
-
 <p align="center">
-  <a href="README.md"><img src="https://img.shields.io/badge/English-README-1f6feb?style=for-the-badge&labelColor=0d1117" alt="English README"></a>
-  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/%E4%B8%AD%E6%96%87-README-1f6feb?style=for-the-badge&labelColor=0d1117" alt="中文 README"></a>
-  <a href="README.ar.md"><img src="https://img.shields.io/badge/%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9-README-1f6feb?style=for-the-badge&labelColor=0d1117" alt="Arabic README"></a>
+  <a href="README.md"><strong>English</strong></a>
+  ·
+  <a href="README.zh-CN.md"><strong>中文</strong></a>
+  ·
+  <a href="README.ar.md"><strong>العربية</strong></a>
 </p>
 
 <p align="center">
