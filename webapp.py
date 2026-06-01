@@ -213,6 +213,9 @@ def _init_db():
         "ALTER TABLE users ADD COLUMN target_band TEXT",
         "ALTER TABLE users ADD COLUMN accent TEXT",
         "ALTER TABLE users ADD COLUMN preferred_topic TEXT",
+        "ALTER TABLE users ADD COLUMN invite_code TEXT",
+        "ALTER TABLE users ADD COLUMN referred_by INTEGER",
+        "ALTER TABLE users ADD COLUMN favorite_topics TEXT",  # JSON array of slugs
     ]:
         try:
             with _db() as c:
@@ -281,10 +284,32 @@ def _require_user(request: Request) -> int:
 def _user_row(user_id: int):
     with _db() as c:
         row = c.execute(
-            "SELECT id, phone, name, target_band, accent, preferred_topic, created_at "
+            "SELECT id, phone, name, target_band, accent, preferred_topic, created_at, "
+            "       invite_code, referred_by, favorite_topics "
             "FROM users WHERE id = ?", (user_id,)
         ).fetchone()
-    return dict(row) if row else None
+        if not row:
+            return None
+        out = dict(row)
+        # Backfill: any user who signed up before the invite_code column existed
+        # gets one generated lazily on first /api/me hit.
+        if not out.get("invite_code"):
+            for _ in range(5):
+                code = _generate_invite_code()
+                try:
+                    c.execute("UPDATE users SET invite_code = ? WHERE id = ?", (code, user_id))
+                    out["invite_code"] = code
+                    break
+                except _db_mod.IntegrityError:
+                    continue
+        # Count how many users this person invited
+        cur = c.execute("SELECT COUNT(*) as n FROM users WHERE referred_by = ?", (user_id,))
+        out["invite_count"] = cur.fetchone()["n"]
+    try:
+        out["favorite_topics"] = json.loads(out.get("favorite_topics") or "[]")
+    except Exception:
+        out["favorite_topics"] = []
+    return out
 
 
 # Chinese mobile: 11 digits starting with 1 (1[3-9]xxxxxxxxx). Strip any +86 country code first.
@@ -868,6 +893,26 @@ def index():
     return FileResponse(HERE / "index.html")
 
 
+def _generate_invite_code() -> str:
+    """8-char base36-ish code. We retry on the (cosmically unlikely) collision."""
+    # Avoid 0/O/1/I — easier to read in shared links.
+    alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+    return "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+def _resolve_inviter(invite_code: str | None) -> int | None:
+    """Look up an inviter by their invite_code. Returns user_id or None."""
+    if not invite_code:
+        return None
+    invite_code = invite_code.strip().upper()
+    if not invite_code or len(invite_code) > 16:
+        return None
+    with _db() as c:
+        cur = c.execute("SELECT id FROM users WHERE invite_code = ?", (invite_code,))
+        row = cur.fetchone()
+        return row["id"] if row else None
+
+
 # ── Auth (phone-based). Error details are stable keys the client maps to localized text. ──
 @app.post("/api/signup")
 async def signup(request: Request):
@@ -875,23 +920,35 @@ async def signup(request: Request):
     phone = _normalize_phone(body.get("phone") or "")
     password = body.get("password") or ""
     name = (body.get("name") or "").strip() or None
+    referred_by = _resolve_inviter(body.get("invite_code"))
     if not _PHONE_RE.match(phone):
         raise HTTPException(400, "phone_invalid")
     if len(password) < 6:
         raise HTTPException(400, "password_short")
     pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    try:
-        with _db() as c:
-            cur = c.execute(
-                "INSERT INTO users (phone, password_hash, name, created_at) VALUES (?, ?, ?, ?) RETURNING id",
-                (phone, pw_hash, name, time.time()),
-            )
-            row = cur.fetchone()
-            user_id = row["id"]
-    except _db_mod.IntegrityError:
+    # Generate a unique invite code (retry on collision — astronomically unlikely)
+    for _ in range(5):
+        invite_code = _generate_invite_code()
+        try:
+            with _db() as c:
+                cur = c.execute(
+                    "INSERT INTO users (phone, password_hash, name, created_at, invite_code, referred_by) "
+                    "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+                    (phone, pw_hash, name, time.time(), invite_code, referred_by),
+                )
+                row = cur.fetchone()
+                user_id = row["id"]
+            break
+        except _db_mod.IntegrityError as e:
+            # Phone duplicate -> 409. Invite-code duplicate -> retry.
+            # We can't distinguish reliably across DBs, so try once more then bail.
+            if "phone" in str(e).lower():
+                raise HTTPException(409, "phone_taken")
+            continue
+    else:
         raise HTTPException(409, "phone_taken")
     request.session["user_id"] = user_id
-    return {"id": user_id, "phone": phone, "name": name}
+    return {"id": user_id, "phone": phone, "name": name, "invite_code": invite_code}
 
 
 @app.post("/api/login")
@@ -931,10 +988,11 @@ def me(request: Request):
 
 @app.patch("/api/me")
 async def update_me(request: Request):
-    """Update editable profile fields. Any subset of name/target_band/accent/preferred_topic."""
+    """Update editable profile fields. Any subset of
+    name / target_band / accent / preferred_topic / favorite_topics."""
     uid = _require_user(request)
     body = await request.json()
-    allowed = {"name", "target_band", "accent", "preferred_topic"}
+    allowed = {"name", "target_band", "accent", "preferred_topic", "favorite_topics"}
     updates = {}
     for k in allowed:
         if k not in body:
@@ -950,6 +1008,17 @@ async def update_me(request: Request):
         raise HTTPException(400, "bad_accent")
     if "preferred_topic" in updates and updates["preferred_topic"] not in (None, *PART1_BANK.keys()):
         raise HTTPException(400, "bad_topic")
+    if "favorite_topics" in updates:
+        raw = updates["favorite_topics"]
+        if raw in (None, ""):
+            updates["favorite_topics"] = "[]"
+        else:
+            if not isinstance(raw, list):
+                raise HTTPException(400, "bad_favorites")
+            cleaned = [t for t in raw if isinstance(t, str) and t in PART1_BANK]
+            if len(cleaned) > 30:
+                raise HTTPException(400, "too_many_favorites")
+            updates["favorite_topics"] = json.dumps(cleaned)
     if not updates:
         return _user_row(uid)
     sets = ", ".join(f"{k} = ?" for k in updates)
@@ -1146,6 +1215,12 @@ def get_session(sid: str, request: Request):
 
 
 BAND_REGEX = re.compile(r"Overall\s*([0-9](?:\.[0-9])?)", re.IGNORECASE)
+# Pulls the 4 sub-bands from "F&C x.x | Lex x.x | Gram x.x | Pron x.x | Overall x.x"
+SUB_BAND_REGEX = re.compile(
+    r"F&C\s*([0-9](?:\.[0-9])?)\s*\|\s*Lex\s*([0-9](?:\.[0-9])?)\s*\|\s*"
+    r"Gram\s*([0-9](?:\.[0-9])?)\s*\|\s*Pron\s*([0-9](?:\.[0-9])?)",
+    re.IGNORECASE,
+)
 
 
 def _extract_band(feedback):
@@ -1157,6 +1232,24 @@ def _extract_band(feedback):
         return None
     try:
         return float(m.group(1))
+    except ValueError:
+        return None
+
+
+def _extract_sub_bands(feedback):
+    """Pull {fc, lex, gram, pron} sub-scores out of a feedback report; None if missing."""
+    if not feedback:
+        return None
+    m = SUB_BAND_REGEX.search(feedback)
+    if not m:
+        return None
+    try:
+        return {
+            "fc":   float(m.group(1)),
+            "lex":  float(m.group(2)),
+            "gram": float(m.group(3)),
+            "pron": float(m.group(4)),
+        }
     except ValueError:
         return None
 
@@ -1185,6 +1278,34 @@ def list_sessions(request: Request, limit: int = 50):
             "turns": len(history),
             "examiner_turns": examiner_turns,
             "band": _extract_band(r["feedback"]),
+            "sub_bands": _extract_sub_bands(r["feedback"]),
+        })
+    return out
+
+
+@app.get("/api/progress")
+def progress_series(request: Request, limit: int = 50):
+    """Chronological time-series for the progress chart — oldest first.
+    Returns only completed sessions that have a parseable band."""
+    uid = _require_user(request)
+    with _db() as c:
+        rows = c.execute(
+            "SELECT id, updated_at, feedback FROM sessions "
+            "WHERE user_id = ? AND status = 'complete' "
+            "ORDER BY updated_at ASC LIMIT ?",
+            (uid, limit),
+        ).fetchall()
+    out = []
+    for r in rows:
+        band = _extract_band(r["feedback"])
+        sub = _extract_sub_bands(r["feedback"])
+        if band is None and not sub:
+            continue
+        out.append({
+            "id": r["id"],
+            "at": r["updated_at"],
+            "overall": band,
+            "sub_bands": sub,
         })
     return out
 

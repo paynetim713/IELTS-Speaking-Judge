@@ -458,6 +458,48 @@ footer {
 @media (max-width: 600px) {
   #fbToggle { bottom: 80px; right: 14px; }  /* avoid collision with mic / mobile keyboard */
 }
+
+/* ──────── Progress chart ──────── */
+.progress-card {
+  margin: 0 0 16px; padding: 14px 16px;
+  background: var(--bg, #14171c); border: 1px solid var(--border, #2a2d34);
+  border-radius: 10px;
+}
+.progress-card.hidden { display: none; }
+.progress-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; color: #aaa; margin-bottom: 8px;
+}
+.progress-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: #888; }
+.progress-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.progress-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+#progressChart { width: 100%; height: auto; max-height: 240px; }
+
+/* ──────── Invite-friends card ──────── */
+.invite-card {
+  margin: 0 0 16px; padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(74,143,255,0.08), rgba(168,85,247,0.06));
+  border: 1px solid rgba(74,143,255,0.2);
+  border-radius: 10px;
+}
+.invite-card.hidden { display: none; }
+.invite-head { font-size: 14px; color: #fff; font-weight: 600; margin-bottom: 4px; }
+.invite-sub { font-size: 12px; color: #aaa; margin-bottom: 10px; }
+.invite-link-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.invite-link-row input {
+  flex: 1; padding: 8px 10px; background: var(--bg, #1a1d23);
+  border: 1px solid var(--border, #333); color: #eee;
+  border-radius: 6px; font-size: 12px; font-family: monospace;
+}
+.invite-copy {
+  padding: 8px 14px; background: #2563eb; color: #fff;
+  border: none; border-radius: 6px; cursor: pointer; font-size: 12px;
+  font-family: inherit;
+}
+.invite-copy:hover { background: #1d4ed8; }
+.invite-copy.copied { background: #22c55e; }
+.invite-stat { font-size: 12px; color: #aaa; }
+.invite-stat span:last-child { color: #4a8fff; font-weight: 600; font-size: 14px; }
 .auth-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 18px; padding: 38px 36px; width: 100%; max-width: 400px;
@@ -610,6 +652,30 @@ footer {
       <h2 data-i18n="history.title">Past mock tests</h2>
       <button class="nav-link" id="closeHistoryBtn" type="button" data-i18n="settings.close">Close</button>
     </div>
+    <!-- Progress chart appears here when there are 2+ completed sessions -->
+    <div id="progressCard" class="progress-card hidden">
+      <div class="progress-head">
+        <span data-i18n="progress.title">Your band trend</span>
+        <span class="progress-legend">
+          <span><i style="background:#4a8fff"></i> Overall</span>
+          <span><i style="background:#22c55e"></i> F&amp;C</span>
+          <span><i style="background:#f59e0b"></i> Lex</span>
+          <span><i style="background:#ef4444"></i> Gram</span>
+          <span><i style="background:#a855f7"></i> Pron</span>
+        </span>
+      </div>
+      <svg id="progressChart" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+    </div>
+    <!-- Invite-friends section -->
+    <div id="inviteCard" class="invite-card hidden">
+      <div class="invite-head" data-i18n="invite.title">Invite friends</div>
+      <div class="invite-sub" data-i18n="invite.sub">Share your link — beta tier supports unlimited free practice.</div>
+      <div class="invite-link-row">
+        <input type="text" id="inviteLink" readonly>
+        <button type="button" id="inviteCopy" class="invite-copy" data-i18n="invite.copy">Copy</button>
+      </div>
+      <div class="invite-stat"><span data-i18n="invite.count_prefix">Friends joined:</span> <span id="inviteCount">0</span></div>
+    </div>
     <div id="historyList" class="history-list"></div>
   </div>
 </div>
@@ -659,9 +725,13 @@ footer {
           <div class="settings-label" data-i18n="setup.topic">Part 1 topic</div>
           <div class="settings-hint" data-i18n="setup.topic.hint">Random or pick one</div>
         </div>
-        <select id="setupTopic">
-          <option value="" data-i18n="setup.topic.random">Random</option>
-        </select>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <select id="setupTopic" style="flex:1;">
+            <option value="" data-i18n="setup.topic.random">Random</option>
+          </select>
+          <button type="button" id="setupTopicFav" title="Toggle favorite"
+                  style="padding:6px 10px;background:transparent;border:1px solid #444;border-radius:6px;cursor:pointer;color:#666;font-size:16px;">★</button>
+        </div>
       </div>
     </div>
     <button type="button" id="setupTtsTest" style="margin:0 0 12px;padding:8px 14px;background:transparent;color:#9aa;border:1px solid #555;border-radius:6px;cursor:pointer;font-size:13px;width:100%;">🔊 <span data-i18n="setup.tts_test">Test examiner voice</span></button>
@@ -831,6 +901,45 @@ const setupBand = document.getElementById('setupBand');
 const setupAccent = document.getElementById('setupAccent');
 const setupTopic = document.getElementById('setupTopic');
 const setupTtsTest = document.getElementById('setupTtsTest');
+const setupTopicFav = document.getElementById('setupTopicFav');
+
+function paintFavStar() {
+  if (!setupTopicFav) return;
+  const slug = setupTopic.value;
+  const favs = (currentUser && currentUser.favorite_topics) || [];
+  const isFav = slug && favs.includes(slug);
+  setupTopicFav.style.color = isFav ? '#f0b400' : '#666';
+  setupTopicFav.style.borderColor = isFav ? '#f0b400' : '#444';
+  setupTopicFav.title = isFav ? (t('setup.fav.remove') || 'Remove from favorites')
+                              : (t('setup.fav.add') || 'Add to favorites');
+}
+if (setupTopic) setupTopic.addEventListener('change', paintFavStar);
+if (setupTopicFav) {
+  setupTopicFav.addEventListener('click', async () => {
+    if (!currentUser) return;
+    const slug = setupTopic.value;
+    if (!slug) return;  // can't favorite "Random"
+    const favs = new Set(currentUser.favorite_topics || []);
+    if (favs.has(slug)) favs.delete(slug); else favs.add(slug);
+    const next = [...favs];
+    try {
+      const r = await fetch(api('/api/me'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ favorite_topics: next }),
+        credentials: CRED,
+      });
+      if (r.ok) {
+        currentUser = await r.json();
+        // Re-render the dropdown to refresh the optgroup
+        _topicsLoaded = false;
+        await loadTopics();
+        setupTopic.value = slug;
+        paintFavStar();
+      }
+    } catch (_) {}
+  });
+}
 
 // ──────── Feedback widget ────────
 const fbToggle = document.getElementById('fbToggle');
@@ -1031,6 +1140,15 @@ const I18N = {
     'fb.thanks': '谢谢!反馈已收到。',
     'fb.err.short': '至少写几个字哦',
     'fb.err.send': '发送失败,稍后再试',
+    'progress.title': '你的 band 趋势',
+    'invite.title': '邀请朋友',
+    'invite.sub': '分享你的链接 — beta 期所有人免费无限练习。',
+    'invite.copy': '复制',
+    'invite.copied': '已复制!',
+    'invite.count_prefix': '已邀请:',
+    'setup.favorites': '我的收藏',
+    'setup.fav.add': '加入收藏',
+    'setup.fav.remove': '取消收藏',
     'err.bad_target_band': '目标分数值不合法',
     'err.bad_accent': '口音值不合法',
     'err.bad_topic': '主题值不合法',
@@ -1128,6 +1246,15 @@ const I18N = {
     'fb.thanks': 'Thanks! Your feedback was received.',
     'fb.err.short': 'Please write at least a few words.',
     'fb.err.send': 'Could not send — try again.',
+    'progress.title': 'Your band trend',
+    'invite.title': 'Invite friends',
+    'invite.sub': 'Share your link — beta supports unlimited free practice.',
+    'invite.copy': 'Copy',
+    'invite.copied': 'Copied!',
+    'invite.count_prefix': 'Friends joined:',
+    'setup.favorites': 'Favorites',
+    'setup.fav.add': 'Add to favorites',
+    'setup.fav.remove': 'Remove from favorites',
     'err.bad_target_band': 'Invalid target band value.',
     'err.bad_accent': 'Invalid accent value.',
     'err.bad_topic': 'Invalid topic value.',
@@ -1873,6 +2000,19 @@ async function loadTopics() {
     if (random) setupTopic.appendChild(random);
     // Prefer the new {value, label} shape; fall back to bare slug list.
     const items = data.labelled || (data.topics || []).map(t => ({ value: t, label: t }));
+    // Favorites first as a dedicated optgroup; then all topics
+    const favs = (currentUser && currentUser.favorite_topics) || [];
+    if (favs.length) {
+      const grp = document.createElement('optgroup');
+      grp.label = '⭐ ' + (t('setup.favorites') || 'Favorites');
+      items.filter(it => favs.includes(it.value)).forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.value;
+        opt.textContent = item.label;
+        grp.appendChild(opt);
+      });
+      setupTopic.appendChild(grp);
+    }
     items.forEach(item => {
       const opt = document.createElement('option');
       opt.value = item.value;
@@ -1893,6 +2033,7 @@ function showSetup() {
   }
   loadTopics().then(() => {
     if (currentUser && currentUser.preferred_topic) setupTopic.value = currentUser.preferred_topic;
+    paintFavStar();
   });
   setTimeout(() => setupName.focus(), 80);
 }
@@ -1968,6 +2109,10 @@ async function openHistory() {
   historyPanel.classList.remove('hidden');
   historyPanel.setAttribute('aria-hidden', 'false');
   historyList.innerHTML = `<div class="history-empty">${escapeHtml(t('history.loading'))}</div>`;
+  // Invite card always shown if logged in
+  renderInviteCard();
+  // Progress chart loads in parallel with history
+  loadProgressChart();
   try {
     const r = await fetch(api('/api/sessions'), { credentials: CRED });
     const list = await r.json();
@@ -1975,6 +2120,111 @@ async function openHistory() {
   } catch (e) {
     historyList.innerHTML = `<div class="history-empty">${escapeHtml(t('history.failed', e.message))}</div>`;
   }
+}
+
+// ──── Invite-friends card ────
+function capturedRef() {
+  // 1) URL param wins (fresh capture); 2) sessionStorage from earlier visit.
+  const m = /[?&]ref=([A-Z0-9]{4,16})/i.exec(location.search);
+  if (m) {
+    try { sessionStorage.setItem('ielts.ref', m[1].toUpperCase()); } catch (_) {}
+    return m[1].toUpperCase();
+  }
+  try { return sessionStorage.getItem('ielts.ref') || ''; } catch (_) { return ''; }
+}
+
+function renderInviteCard() {
+  const card = document.getElementById('inviteCard');
+  if (!card) return;
+  if (!currentUser || !currentUser.invite_code) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const linkEl = document.getElementById('inviteLink');
+  const cnt = document.getElementById('inviteCount');
+  const origin = (API_BASE || location.origin).replace(/\/+$/, '');
+  linkEl.value = `${origin}/?ref=${currentUser.invite_code}`;
+  cnt.textContent = currentUser.invite_count || 0;
+  const copyBtn = document.getElementById('inviteCopy');
+  copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(linkEl.value);
+    } catch (_) {
+      linkEl.select(); document.execCommand('copy');
+    }
+    copyBtn.classList.add('copied');
+    const orig = copyBtn.textContent;
+    copyBtn.textContent = t('invite.copied') || 'Copied!';
+    setTimeout(() => { copyBtn.classList.remove('copied'); copyBtn.textContent = orig; }, 1500);
+  };
+}
+
+// ──── Progress chart (SVG, no library) ────
+async function loadProgressChart() {
+  const card = document.getElementById('progressCard');
+  const svg = document.getElementById('progressChart');
+  if (!card || !svg) return;
+  try {
+    const r = await fetch(api('/api/progress'), { credentials: CRED });
+    if (!r.ok) { card.classList.add('hidden'); return; }
+    const points = await r.json();
+    if (!Array.isArray(points) || points.length < 2) { card.classList.add('hidden'); return; }
+    card.classList.remove('hidden');
+    drawProgressChart(svg, points);
+  } catch (_) { card.classList.add('hidden'); }
+}
+
+function drawProgressChart(svg, points) {
+  // viewBox is 600x220. Margins leave room for axis labels.
+  const W = 600, H = 220, PAD_L = 32, PAD_R = 8, PAD_T = 12, PAD_B = 24;
+  const innerW = W - PAD_L - PAD_R, innerH = H - PAD_T - PAD_B;
+  // Y axis: band 4–9 (real IELTS range).
+  const BAND_LO = 4, BAND_HI = 9;
+  const yFor = (b) => PAD_T + innerH * (1 - (b - BAND_LO) / (BAND_HI - BAND_LO));
+  const xFor = (i) => PAD_L + (points.length > 1 ? (i / (points.length - 1)) * innerW : innerW / 2);
+  const SERIES = [
+    { key: 'overall', label: 'Overall', color: '#4a8fff' },
+    { key: 'fc',      label: 'F&C',     color: '#22c55e' },
+    { key: 'lex',     label: 'Lex',     color: '#f59e0b' },
+    { key: 'gram',    label: 'Gram',    color: '#ef4444' },
+    { key: 'pron',    label: 'Pron',    color: '#a855f7' },
+  ];
+  const seriesValue = (p, k) => k === 'overall' ? p.overall : (p.sub_bands ? p.sub_bands[k] : null);
+  let svgInner = '';
+  // Grid + Y labels (every 1.0)
+  for (let b = BAND_LO; b <= BAND_HI; b++) {
+    const y = yFor(b);
+    svgInner += `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#2a2d34" stroke-width="1"/>`;
+    svgInner += `<text x="${PAD_L - 6}" y="${y + 4}" fill="#666" font-size="10" text-anchor="end">${b}.0</text>`;
+  }
+  // Each series as a polyline + dots, skipping null points
+  SERIES.forEach(s => {
+    const segs = [];
+    let cur = [];
+    points.forEach((p, i) => {
+      const v = seriesValue(p, s.key);
+      if (v == null) {
+        if (cur.length) segs.push(cur);
+        cur = [];
+      } else {
+        cur.push([xFor(i), yFor(v)]);
+      }
+    });
+    if (cur.length) segs.push(cur);
+    segs.forEach(seg => {
+      const d = seg.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+      svgInner += `<polyline points="${d}" fill="none" stroke="${s.color}" stroke-width="2"/>`;
+      seg.forEach(([x, y]) => {
+        svgInner += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${s.color}"/>`;
+      });
+    });
+  });
+  // X axis: session indices, only label first/last (and ~midpoint if many)
+  const xLabels = points.length <= 2 ? [0, points.length - 1] : [0, Math.floor((points.length - 1) / 2), points.length - 1];
+  xLabels.forEach(i => {
+    const d = new Date(points[i].at * 1000);
+    const lbl = `${d.getMonth() + 1}/${d.getDate()}`;
+    svgInner += `<text x="${xFor(i).toFixed(1)}" y="${H - 6}" fill="#666" font-size="10" text-anchor="middle">${lbl}</text>`;
+  });
+  svg.innerHTML = svgInner;
 }
 
 function renderHistoryList(list) {
@@ -2071,8 +2321,9 @@ authForm.addEventListener('submit', async (e) => {
   const originalLabel = authSubmit.textContent;
   authSubmit.textContent = t(authMode === 'signup' ? 'auth.submit.signing' : 'auth.submit.loginning');
   try {
+    const refCode = capturedRef();
     const body = authMode === 'signup'
-      ? { phone, password, name: authName.value.trim() }
+      ? { phone, password, name: authName.value.trim(), invite_code: refCode || undefined }
       : { phone, password };
     const r = await fetch(api('/api/') + (authMode === 'signup' ? 'signup' : 'login'), {
       method: 'POST',
