@@ -584,6 +584,7 @@ footer {
         </select>
       </div>
     </div>
+    <button type="button" id="setupTtsTest" style="margin:0 0 12px;padding:8px 14px;background:transparent;color:#9aa;border:1px solid #555;border-radius:6px;cursor:pointer;font-size:13px;width:100%;">🔊 <span data-i18n="setup.tts_test">Test examiner voice</span></button>
     <button class="setup-start" id="setupStart" type="button" data-i18n="setup.start">Start test</button>
   </div>
 </div>
@@ -701,6 +702,16 @@ const setupName = document.getElementById('setupName');
 const setupBand = document.getElementById('setupBand');
 const setupAccent = document.getElementById('setupAccent');
 const setupTopic = document.getElementById('setupTopic');
+const setupTtsTest = document.getElementById('setupTtsTest');
+if (setupTtsTest) {
+  setupTtsTest.addEventListener('click', () => {
+    // The click itself counts as a user gesture, so audio gets primed inline.
+    // If iPhone silent switch is on / browser doesn't support TTS, the
+    // banner inside speak() will warn the user.
+    primeAudio();
+    speak('Good afternoon. My name is Sarah. Could you tell me your full name and where you are from?');
+  });
+}
 const setupStart = document.getElementById('setupStart');
 const authOverlay = document.getElementById('authOverlay');
 const authError = document.getElementById('authError');
@@ -799,6 +810,7 @@ const I18N = {
     'setup.accent': '识别口音', 'setup.accent.hint': '麦克风识别用的英语口音',
     'setup.topic': 'Part 1 主题', 'setup.topic.hint': '随机或指定',
     'setup.topic.random': '随机',
+    'setup.tts_test': '试听考官声音',
     'setup.start': '开始测试',
     'setup.starting': '准备中…',
     'err.bad_target_band': '目标分数值不合法',
@@ -878,6 +890,7 @@ const I18N = {
     'setup.accent': 'Recognition accent', 'setup.accent.hint': 'Accent the microphone listens for',
     'setup.topic': 'Part 1 topic', 'setup.topic.hint': 'Random or pick one',
     'setup.topic.random': 'Random',
+    'setup.tts_test': 'Test examiner voice',
     'setup.start': 'Start test',
     'setup.starting': 'Starting…',
     'err.bad_target_band': 'Invalid target band value.',
@@ -1175,19 +1188,70 @@ function stripForSpeech(text) {
     .trim();
 }
 
+// iOS Safari + Android Chrome: speechSynthesis.speak() is silently no-op
+// unless audio was previously activated by a real user gesture (tap/click).
+// We "prime" the audio session with a near-silent utterance on the user's
+// FIRST tap anywhere in the doc, so the actual examiner speech later works.
+let _audioPrimed = false;
+function primeAudio() {
+  if (_audioPrimed) return;
+  // Some mobile browsers won't activate unless the utterance has real content,
+  // so use a single character at zero volume.
+  try {
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    u.rate = 1;
+    speechSynthesis.speak(u);
+    _audioPrimed = true;
+  } catch (_) {}
+}
+// First tap, anywhere → prime. capture phase so it runs before any other handler.
+document.addEventListener('pointerdown', primeAudio, { capture: true, once: true });
+document.addEventListener('touchstart', primeAudio, { capture: true, once: true, passive: true });
+document.addEventListener('keydown', primeAudio, { capture: true, once: true });
+
 function speak(text) {
   if (!ttsOnEl.checked) return;
   speechSynthesis.cancel();
   const clean = stripForSpeech(text);
   if (!clean) return;
+  // On iOS, the voice list can still be empty here (loaded asynchronously).
+  // Speaking without a voice still works — the browser picks a default.
   const u = new SpeechSynthesisUtterance(clean);
   const v = currentVoice();
   if (v) { u.voice = v; u.lang = v.lang; }
   u.rate = currentRate();
-  u.onstart = () => setStatus('status.speaking', 'speaking');
-  u.onend = () => setStatus('status.ready');
+  u.volume = 1;
+  let startedAt = 0;
+  u.onstart = () => { startedAt = Date.now(); setStatus('status.speaking', 'speaking'); };
+  u.onend = () => {
+    setStatus('status.ready');
+    // Heuristic: if onend fires under 80ms after onstart (or onstart never fired),
+    // the browser muted us — most often iPhone silent switch on, or page lost
+    // foreground focus. Hint the user once per session.
+    const dur = startedAt ? (Date.now() - startedAt) : 0;
+    if (clean.length > 8 && (!startedAt || dur < 80)) maybeWarnSilentTTS();
+  };
   u.onerror = () => setStatus('status.ready');
   speechSynthesis.speak(u);
+}
+
+let _ttsWarned = false;
+function maybeWarnSilentTTS() {
+  if (_ttsWarned) return;
+  _ttsWarned = true;
+  // Lightweight inline warning; no alert() to avoid blocking the chat.
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;left:0;right:0;bottom:0;padding:10px 14px;'
+    + 'background:#b85a00;color:#fff;font-size:13px;text-align:center;z-index:9999;'
+    + 'box-shadow:0 -2px 10px rgba(0,0,0,.3);';
+  banner.innerHTML = '🔇 听不见考官声音?<br>'
+    + '• iPhone:检查左侧静音拨片(橙色就是静音)<br>'
+    + '• 用 Safari/Chrome,不要用微信/UC 内置浏览器<br>'
+    + '<span style="text-decoration:underline;cursor:pointer">点这里关闭</span>';
+  banner.querySelector('span').onclick = () => banner.remove();
+  document.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 12000);
 }
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
