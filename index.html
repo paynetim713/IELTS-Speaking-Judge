@@ -1071,9 +1071,7 @@ if (fbSubmit) fbSubmit.addEventListener('click', async () => {
 });
 if (setupTtsTest) {
   setupTtsTest.addEventListener('click', () => {
-    // The click itself counts as a user gesture, so audio gets primed inline.
-    // If iPhone silent switch is on / browser doesn't support TTS, the
-    // banner inside speak() will warn the user.
+    // The click is a user gesture, which primes iOS audio for later speak() calls.
     primeAudio();
     speak('Good afternoon. My name is Sarah. Could you tell me your full name and where you are from?');
   });
@@ -1570,14 +1568,11 @@ speechSynthesis.onvoiceschanged = loadVoices;
 loadVoices();
 voiceSel.addEventListener('change', () => localStorage.setItem(VOICE_KEY, voiceSel.value));
 
-// API base URL. Same-origin by default; override at build time by setting
-//   window.IELTS_API_BASE = 'https://your-app.onrender.com'
-// in a tiny <script> block before this file. Used so the static frontend on
-// Cloudflare Pages can call the API on Render.
+// Override API_BASE when serving the frontend from a different origin:
+//   <script>window.IELTS_API_BASE = 'https://...onrender.com'</script>
 const API_BASE = (typeof window !== 'undefined' && window.IELTS_API_BASE) || '';
 function api(path) { return API_BASE + path; }
-// All API requests must carry the session cookie; in cross-origin mode the
-// browser only sends it when credentials: 'include' is set.
+// Cross-origin requests need credentials:'include' to send the session cookie.
 const CRED = API_BASE ? 'include' : 'same-origin';
 
 const RECOG_KEY = 'ielts.recogLang';
@@ -1632,13 +1627,11 @@ function ttsLog(msg) {
   pane.scrollTop = pane.scrollHeight;
 }
 
-// Audio priming: every user-gesture event keeps re-priming on iOS because
-// the audio session can drop between gestures. Cheap (zero-volume space char).
+// iOS drops its audio session between gestures, so we re-prime on every tap.
 let _audioPrimed = false;
 function primeAudio() {
   try {
-    // Use Force resume in case a previous speak() left the synth paused.
-    speechSynthesis.resume();
+    speechSynthesis.resume();   // in case a previous speak() left it paused
     const u = new SpeechSynthesisUtterance(' ');
     u.volume = 0;
     u.rate = 1;
@@ -1647,13 +1640,10 @@ function primeAudio() {
     _audioPrimed = true;
   } catch (e) { ttsLog('prime threw: ' + e.message); }
 }
-// On iOS, audio session can drop between gestures. Re-prime on every tap.
 document.addEventListener('pointerdown', primeAudio, { capture: true, passive: true });
 document.addEventListener('touchstart', primeAudio, { capture: true, passive: true });
 document.addEventListener('keydown', primeAudio, { capture: true });
 
-// Currently-playing server-TTS <audio>. Tracking it lets us stop overlapping
-// utterances when the user moves on.
 let _serverAudio = null;
 
 function stopAllSpeech() {
@@ -1666,18 +1656,18 @@ function stopAllSpeech() {
   } catch (_) {}
 }
 
-// Pick the right server-TTS voice for the candidate's chosen accent + sex.
 function serverTtsVoiceParam() {
-  const accent = (recogLangSel && recogLangSel.value) || 'en-GB';  // candidate's accent
-  // Examiner sex: re-use the existing browser voice picker's hint, default to female.
+  // Match the candidate's chosen accent and pick male/female by the local
+  // browser voice they picked.
+  const accent = (recogLangSel && recogLangSel.value) || 'en-GB';
   const v = currentVoice && currentVoice();
   const isMale = v && /(Ryan|George|Daniel|Mark|William|Prabhat|Brian|Guy)/i.test(v.name || '');
   return accent + (isMale ? '-male' : '-female');
 }
 
+// Resolves true if the server audio actually starts playing; false signals the
+// caller to fall back to browser SpeechSynthesis.
 async function speakViaServer(text) {
-  // Returns true on success (audio actually started playing), false to let the
-  // caller fall back to browser SpeechSynthesis.
   return new Promise((resolve) => {
     try {
       stopAllSpeech();
@@ -1692,7 +1682,6 @@ async function speakViaServer(text) {
       a.onplay = () => { ttsLog('server TTS onplay'); setStatus('status.speaking', 'speaking'); };
       a.onended = () => { ttsLog('server TTS onended'); if (_serverAudio === a) _serverAudio = null; setStatus('status.ready'); };
       a.onerror = () => { ttsLog('server TTS onerror — falling back'); if (!resolved) { resolved = true; resolve(false); } };
-      // If playback hasn't started after 1.2s, fall back.
       const fbTimer = setTimeout(() => {
         if (!resolved && a.paused) { ttsLog('server TTS timeout — falling back'); resolved = true; resolve(false); }
       }, 1200);
@@ -1715,8 +1704,8 @@ async function speak(text) {
   if (!ttsOnEl.checked) { ttsLog('TTS toggle OFF'); return; }
   const clean = stripForSpeech(text);
   if (!clean) { ttsLog('empty after strip'); return; }
-  // Try server TTS first — way more natural than browser voices.
-  // If it works, we're done. If it errors / times out, fall back to browser.
+  // Server TTS first — way better than the browser voice. Browser TTS is the
+  // fallback when this errors out or the user forces it via the settings toggle.
   const useServer = !document.getElementById('ttsBrowser')
     || !document.getElementById('ttsBrowser').checked;
   if (useServer) {

@@ -1,13 +1,7 @@
-r"""
-IELTS Examiner web UI backend.
+"""IELTS Examiner web UI backend.
 
-Streams ollama responses over Server-Sent Events. Browser handles STT/TTS.
-
-A phase hint is injected before each generation so the 7B model knows
-where it is in the test (Part 1 Q n, time to deliver cue card, etc.).
-
-Run:
-    .\.venv\Scripts\python.exe webapp.py
+Streams LLM responses over SSE. Browser handles STT/TTS. A phase hint is
+injected before each generation so the model knows where it is in the test.
 """
 
 import asyncio
@@ -23,19 +17,15 @@ from pathlib import Path
 import bcrypt
 import requests
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-
-import llm_provider
-import db as _db_mod
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-# LLM model selection is delegated to llm_provider.py — it reads LLM_PROVIDER
-# (ollama|groq) and LLM_EXAMINER_MODEL / LLM_FEEDBACK_MODEL from env. We keep
-# these aliases so the rest of webapp.py reads naturally.
+import llm_provider
+import db as _db_mod
+
 MODEL_NAME = llm_provider.examiner_model()
-# Feedback fallback chain stays Ollama-only — on Groq there's no 'bigger' tier,
-# both examiner and feedback use the same 70B model and the chain collapses to one.
+# Groq has no separate "feedback tier" — both turns use the same 70B model.
 if llm_provider.PROVIDER == "groq":
     FEEDBACK_MODEL_CANDIDATES = [llm_provider.feedback_model()]
 else:
@@ -46,10 +36,10 @@ else:
         "qwen2.5:14b-instruct-q3_K_M",
     ]
     FEEDBACK_MODEL_CANDIDATES = [m for m in FEEDBACK_MODEL_CANDIDATES if m]
-FEEDBACK_MODEL_NAME = FEEDBACK_MODEL_CANDIDATES[0]  # legacy alias for logs
+FEEDBACK_MODEL_NAME = FEEDBACK_MODEL_CANDIDATES[0]
 
-# DeepSeek R1 emits <think>...</think> reasoning blocks before the actual answer.
-# Strip them before clamping / showing the user — they leak the band-anchor protocol.
+# DeepSeek R1 emits <think>...</think> reasoning blocks; strip before showing
+# so they don't leak the band-anchor protocol.
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 
 
@@ -60,41 +50,33 @@ def _strip_think_blocks(text: str) -> str:
 
 
 def _pick_feedback_model() -> str:
-    """First model in the priority list that is actually pulled."""
     for name in FEEDBACK_MODEL_CANDIDATES:
         if _model_available(name):
             return name
-    return MODEL_NAME  # ultimate fallback: the examiner model itself
+    return MODEL_NAME
+
 
 _MODEL_AVAIL_CACHE: dict = {}
 
 
 def _model_available(name: str) -> bool:
-    """Cached check against the provider's model list. Cache for 60s so we don't hit it every chat."""
     now = time.time()
     cached = _MODEL_AVAIL_CACHE.get(name)
     if cached and now - cached[0] < 60:
         return cached[1]
     tags = llm_provider.list_available_models()
-    # Match either exact id/tag or Ollama-style short form (qwen2.5:14b → qwen2.5:14b-...)
-    ok = (
-        name in tags
-        or any(t.startswith(name + "-") or t == name + ":latest" for t in tags)
-    )
-    # On Groq, an empty model list almost certainly means the listing endpoint
-    # is rate-limited — don't pessimistically refuse the model we're configured to use.
+    ok = name in tags or any(t.startswith(name + "-") or t == name + ":latest" for t in tags)
+    # Empty list on Groq usually means /models is rate-limited; assume the configured model works.
     if not tags and llm_provider.PROVIDER == "groq":
         ok = True
     _MODEL_AVAIL_CACHE[name] = (now, ok)
     return ok
 
+
 HERE = Path(__file__).parent
 DB_PATH = HERE / "sessions.db"
 _KEY_FILE = HERE / ".secret_key"
 
-# Production sets IELTS_ENV=prod. In prod we require IELTS_SECRET_KEY in env;
-# falling back to a file-backed key on a stateless serverless host (Render free
-# tier respawns) would log everyone out on every restart.
 IELTS_ENV = (os.environ.get("IELTS_ENV") or "dev").strip().lower()
 IS_PROD = IELTS_ENV in ("prod", "production")
 
@@ -106,7 +88,7 @@ def _load_or_create_secret() -> str:
     if IS_PROD:
         raise RuntimeError(
             "IELTS_SECRET_KEY env var is required when IELTS_ENV=prod. "
-            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
         )
     if _KEY_FILE.exists():
         return _KEY_FILE.read_text().strip()
@@ -119,23 +101,20 @@ SECRET_KEY = _load_or_create_secret()
 
 
 def _allowed_origins() -> list[str]:
-    """Dev: localhost variants. Prod: read CORS_ORIGINS comma-list from env."""
     extra = [o.strip() for o in (os.environ.get("CORS_ORIGINS") or "").split(",") if o.strip()]
     dev = [
         "http://localhost:8000", "http://127.0.0.1:8000",
         "http://localhost:5173", "http://127.0.0.1:5173",
         "http://localhost:8765", "http://127.0.0.1:8765",
     ]
-    return list(dict.fromkeys((extra + ([] if IS_PROD else dev))))
+    return list(dict.fromkeys(extra + ([] if IS_PROD else dev)))
 
 
 app = FastAPI()
 app.add_middleware(
     SessionMiddleware,
     secret_key=SECRET_KEY,
-    max_age=60 * 60 * 24 * 30,   # 30 days
-    # In prod the cookie MUST be secure + cross-site so the frontend on Cloudflare
-    # Pages can carry it to the Render API.
+    max_age=60 * 60 * 24 * 30,
     same_site="none" if IS_PROD else "lax",
     https_only=IS_PROD,
 )
@@ -148,16 +127,13 @@ app.add_middleware(
 )
 
 
-# ── Session storage: sqlite for local dev, Postgres (Supabase) when DATABASE_URL is set ──
 def _db():
-    """Backwards-compat alias used throughout this module."""
     return _db_mod.db()
 
 
 def _init_db():
     with _db() as c:
-        c.execute(
-            """
+        c.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id          TEXT PRIMARY KEY,
                 created_at  REAL NOT NULL,
@@ -167,15 +143,13 @@ def _init_db():
                 phase       TEXT NOT NULL,
                 feedback    TEXT
             )
-            """
-        )
+        """)
         c.execute("CREATE INDEX IF NOT EXISTS sessions_updated_idx ON sessions(updated_at DESC)")
-        # Migration: old schema used email; switch to phone-only identifier.
+        # One-shot migration: an early version of the schema used email instead of phone.
         existing_user_cols = _db_mod.column_names(c, "users")
         if "email" in existing_user_cols and "phone" not in existing_user_cols:
             c.execute("DROP TABLE users")
-        c.execute(
-            """
+        c.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 phone          TEXT UNIQUE NOT NULL,
@@ -183,10 +157,8 @@ def _init_db():
                 name           TEXT,
                 created_at     REAL NOT NULL
             )
-            """
-        )
-        c.execute(
-            """
+        """)
+        c.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id       INTEGER,
@@ -199,13 +171,10 @@ def _init_db():
                 url           TEXT,
                 resolved      INTEGER DEFAULT 0
             )
-            """
-        )
+        """)
         c.execute("CREATE INDEX IF NOT EXISTS feedback_created_idx ON feedback(created_at DESC)")
-    # Additive ALTERs: each in its own connection/transaction so a duplicate-
-    # column error on one doesn't poison the others (postgres rolls back the
-    # whole transaction on any error; sqlite tolerates per-statement failure
-    # within a single transaction, but doing it the same way works for both).
+    # Additive ALTERs in their own transactions — Postgres aborts the whole
+    # transaction on any error, so a single duplicate column would lose the rest.
     for ddl in [
         "ALTER TABLE sessions ADD COLUMN user_id INTEGER",
         "ALTER TABLE sessions ADD COLUMN target_band TEXT",
@@ -216,7 +185,7 @@ def _init_db():
         "ALTER TABLE users ADD COLUMN preferred_topic TEXT",
         "ALTER TABLE users ADD COLUMN invite_code TEXT",
         "ALTER TABLE users ADD COLUMN referred_by INTEGER",
-        "ALTER TABLE users ADD COLUMN favorite_topics TEXT",  # JSON array of slugs
+        "ALTER TABLE users ADD COLUMN favorite_topics TEXT",
         "ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0",
     ]:
         try:
@@ -225,7 +194,6 @@ def _init_db():
         except Exception as e:
             if not _db_mod.is_duplicate_column_error(e):
                 raise
-            # column already exists — fine
     with _db() as c:
         c.execute("CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id, updated_at DESC)")
 
@@ -275,11 +243,10 @@ def _save_session(sid, history, phase, status, feedback, user_id=None,
         )
 
 
-# ── Auth helpers ──
 def _require_user(request: Request) -> int:
     uid = request.session.get("user_id")
     if not uid:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(401, "Not authenticated")
     return uid
 
 
@@ -293,8 +260,7 @@ def _user_row(user_id: int):
         if not row:
             return None
         out = dict(row)
-        # Backfill: any user who signed up before the invite_code column existed
-        # gets one generated lazily on first /api/me hit.
+        # Lazy backfill for users created before invite_code existed.
         if not out.get("invite_code"):
             for _ in range(5):
                 code = _generate_invite_code()
@@ -304,7 +270,6 @@ def _user_row(user_id: int):
                     break
                 except _db_mod.IntegrityError:
                     continue
-        # Count how many users this person invited
         cur = c.execute("SELECT COUNT(*) as n FROM users WHERE referred_by = ?", (user_id,))
         out["invite_count"] = cur.fetchone()["n"]
     try:
@@ -314,7 +279,7 @@ def _user_row(user_id: int):
     return out
 
 
-# Chinese mobile: 11 digits starting with 1 (1[3-9]xxxxxxxxx). Strip any +86 country code first.
+# Chinese mobile numbers: 11 digits starting with 1; +86 country code stripped.
 _PHONE_RE = re.compile(r"^1[3-9]\d{9}$")
 
 
@@ -326,26 +291,17 @@ def _normalize_phone(raw: str) -> str:
 
 
 def _owns_session(sess: dict, user_id: int) -> bool:
-    """Strict ownership: legacy sessions (user_id NULL) are orphaned and invisible."""
+    # Pre-auth sessions have user_id NULL — orphaned, invisible.
     return sess.get("user_id") == user_id
 
 
-# ── IELTS pacing (content-aware) ──
-# The strip and hints used to be purely position-based (Nth assistant turn → phase X),
-# but a 7B model often jumps phases (e.g. delivers the cue card after 5 questions
-# instead of 6). So we *derive* each past reply's true phase from its content
-# (cue-card markers, feedback markers) and only fall back to position-based defaults
-# when content has no signal. This keeps the UI strip and next-turn hint in sync.
-PART1_QUESTIONS = 4    # 1 topic frame, 4 questions on that topic
-PART3_QUESTIONS = 5    # 2 sub-themes: 3 + 2
+PART1_QUESTIONS = 4   # one topic, 4 questions
+PART3_QUESTIONS = 5   # two sub-themes: 3 + 2
 
 
-# ── Server-driven question bank: see question_bank.py.
-# The model is the "voice"; the server decides WHICH topic, cue card, and Part 3
-# sub-themes apply so the 7B can't drift off-topic or hallucinate a different cue card.
-# Bank combines 15 curated high-frequency topics with verbatim Cambridge IELTS 4-17 extractions
-# (51 P1 topics, 42 P2 cue cards, 42 P3 theme sets). See build_bank.py + extract_speaking.py.
-from question_bank import PART1_BANK, PART2_BANK, PART3_THEMES, DEFAULT_PART3  # noqa: F401
+# Server-driven question bank — the server picks topic/card/sub-themes so a
+# small model can't drift off-topic. See build_bank.py + extract_speaking.py.
+from question_bank import PART1_BANK, PART2_BANK, PART3_THEMES, DEFAULT_PART3  # noqa: F401, E402
 
 
 def _session_rng(sid: str | None, salt: str = ""):
@@ -355,8 +311,6 @@ def _session_rng(sid: str | None, salt: str = ""):
 
 
 def _pick_part1(sid: str | None, topic_override: str | None = None):
-    """Single Part 1 topic, deterministic per session. 4 question focuses on that topic.
-    Real IELTS: examiner picks ONE familiar topic and stays on it for the whole Part 1."""
     if topic_override and topic_override in PART1_BANK:
         return topic_override, list(PART1_BANK[topic_override][:4])
     rng = _session_rng(sid, "p1")
@@ -365,17 +319,12 @@ def _pick_part1(sid: str | None, topic_override: str | None = None):
 
 
 def _pick_part2(sid: str | None):
-    rng = _session_rng(sid, "p2")
-    return rng.choice(PART2_BANK)
+    return _session_rng(sid, "p2").choice(PART2_BANK)
 
 
 def _pick_part3(card: dict, sid: str | None):
-    """2 sub-themes × 2 focuses, locked to the Part 2 cue card."""
-    themes = PART3_THEMES.get(card.get("p3_key") or "", DEFAULT_PART3)
-    # Mix sub-theme ORDER per session for variety, but keep focus order stable.
-    rng = _session_rng(sid, "p3")
-    themes = list(themes)
-    rng.shuffle(themes)
+    themes = list(PART3_THEMES.get(card.get("p3_key") or "", DEFAULT_PART3))
+    _session_rng(sid, "p3").shuffle(themes)
     return themes
 
 
@@ -392,14 +341,9 @@ def _build_cue_card(card: dict) -> str:
 
 
 def _prev_examiner_openers(history: list, n: int = 3) -> list:
-    """Last n examiner turn openers (first 4 words) — used to discourage repetition."""
+    """First 4 words of the last `n` examiner turns — used to discourage repetition."""
     asst = [m.get("content", "") for m in history if m.get("role") == "assistant"]
-    out = []
-    for c in asst[-n:]:
-        words = (c or "").strip().split()[:4]
-        if words:
-            out.append(" ".join(words))
-    return out
+    return [" ".join((c or "").strip().split()[:4]) for c in asst[-n:] if c and c.strip()]
 
 
 DISCOURSE_MARKERS = (
@@ -915,7 +859,6 @@ def _resolve_inviter(invite_code: str | None) -> int | None:
         return row["id"] if row else None
 
 
-# ── Auth (phone-based). Error details are stable keys the client maps to localized text. ──
 @app.post("/api/signup")
 async def signup(request: Request):
     body = await request.json()
@@ -928,7 +871,6 @@ async def signup(request: Request):
     if len(password) < 6:
         raise HTTPException(400, "password_short")
     pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    # Generate a unique invite code (retry on collision — astronomically unlikely)
     for _ in range(5):
         invite_code = _generate_invite_code()
         try:
@@ -938,14 +880,12 @@ async def signup(request: Request):
                     "VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
                     (phone, pw_hash, name, time.time(), invite_code, referred_by),
                 )
-                row = cur.fetchone()
-                user_id = row["id"]
+                user_id = cur.fetchone()["id"]
             break
         except _db_mod.IntegrityError as e:
-            # Phone duplicate -> 409. Invite-code duplicate -> retry.
-            # We can't distinguish reliably across DBs, so try once more then bail.
             if "phone" in str(e).lower():
                 raise HTTPException(409, "phone_taken")
+            # invite_code collision — retry
             continue
     else:
         raise HTTPException(409, "phone_taken")
@@ -1069,17 +1009,13 @@ def healthz():
     }
 
 
-# ── Beta user feedback ────────────────────────────────────────────────
-# Public POST: anyone (logged in or not) can submit; we still capture user_id
-# when available. GET is gated by ADMIN_FEEDBACK_TOKEN so only the owner can
-# read submissions. Set the env var in Render → Environment.
-_FEEDBACK_RATE = {}  # ip → (count, window_start_ts)
-_FEEDBACK_WINDOW = 60.0       # seconds
-_FEEDBACK_MAX_PER_WINDOW = 5  # per IP
+# Feedback submission — public POST (rate-limited per IP), admin-only read.
+_FEEDBACK_RATE: dict = {}
+_FEEDBACK_WINDOW = 60.0
+_FEEDBACK_MAX_PER_WINDOW = 5
 
 
 def _feedback_rate_limit(request: Request) -> bool:
-    """True if the request should be allowed; False if it tripped the limiter."""
     ip = (request.client.host if request.client else "?") or "?"
     now = time.time()
     count, start = _FEEDBACK_RATE.get(ip, (0, now))
@@ -1092,8 +1028,6 @@ def _feedback_rate_limit(request: Request) -> bool:
 
 @app.post("/api/feedback")
 async def submit_feedback(request: Request):
-    """Public endpoint. Accepts {rating?, category, text, contact?}. Stores with
-    the current user_id if signed in, else anonymous."""
     if not _feedback_rate_limit(request):
         raise HTTPException(429, "rate_limited")
     body = await request.json()
@@ -1135,10 +1069,8 @@ async def submit_feedback(request: Request):
     return {"ok": True}
 
 
-# ── Admin panel (separate session flag so users + admin coexist) ──────────
-# Gate: knowing the ADMIN_FEEDBACK_TOKEN env var. After POST /api/admin/login
-# the cookie carries `is_admin=true` and all /api/admin/* routes accept the
-# request. /api/feedback (legacy query-token GET) still works for direct curl.
+# Admin panel — gated by ADMIN_FEEDBACK_TOKEN, uses a separate is_admin session
+# flag so it doesn't interfere with normal user sessions.
 
 def _admin_token() -> str:
     return os.environ.get("ADMIN_FEEDBACK_TOKEN") or ""
@@ -1149,17 +1081,13 @@ def _require_admin(request: Request):
         raise HTTPException(401, "admin_required")
 
 
-# ── Live admin event bus (in-process; one Render dyno = fine) ──────────
-# WebSocket connections from /admin clients. We broadcast small JSON events
-# (signup/feedback/session_start/session_complete/user_banned/user_deleted)
-# so the panel updates without polling.
+# In-process WebSocket fan-out for the admin panel.
+# Single Render dyno = no need for a real pubsub.
 _admin_ws_clients: set[WebSocket] = set()
 _admin_ws_lock = asyncio.Lock()
 
 
 async def _admin_broadcast(event: dict):
-    """Fan out an event to every connected admin WebSocket. Silently drops
-    dead connections. Safe to call from any async path."""
     if not _admin_ws_clients:
         return
     payload = json.dumps(event, default=str, ensure_ascii=False)
@@ -1178,9 +1106,7 @@ async def _admin_broadcast(event: dict):
 
 
 def _admin_broadcast_sync(event: dict):
-    """Schedule an _admin_broadcast from sync code (e.g. signup, which is in an
-    async route but the broadcasts happen after a sync DB block). Uses the
-    running loop; in tests with no loop, just no-ops."""
+    """Fire-and-forget broadcast from inside a sync block of an async route."""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -1190,27 +1116,21 @@ def _admin_broadcast_sync(event: dict):
 
 @app.websocket("/api/admin/stream")
 async def admin_ws_stream(ws: WebSocket):
-    # SessionMiddleware also populates ws.session for WebSockets.
     if not ws.session.get("is_admin"):
-        await ws.close(code=4401)  # custom code: unauthorized
+        await ws.close(code=4401)
         return
     await ws.accept()
     async with _admin_ws_lock:
         _admin_ws_clients.add(ws)
     try:
-        # Initial hello so the client knows the link is live
         await ws.send_text(json.dumps({"type": "hello", "ts": time.time()}))
-        # Keep the socket open; we don't expect client messages, but reading
-        # gracefully detects disconnection.
         while True:
+            # 30s keepalive — Render's LB cuts idle WS around 60s.
             try:
                 await asyncio.wait_for(ws.receive_text(), timeout=30)
             except asyncio.TimeoutError:
-                # Send a ping; some load balancers cut idle WS at 30-60s.
                 await ws.send_text(json.dumps({"type": "ping", "ts": time.time()}))
-    except WebSocketDisconnect:
-        pass
-    except Exception:
+    except (WebSocketDisconnect, Exception):
         pass
     finally:
         async with _admin_ws_lock:
@@ -1471,10 +1391,8 @@ def list_feedback_legacy(token: str = "", limit: int = 100):
     ]}
 
 
-# ── Server-side TTS (Microsoft Edge neural voices, free, no key) ──────────
-# Replaces the robotic SpeechSynthesis when reachable. Streams MP3 back to the
-# client; the browser plays it via an <audio> element. Falls back to browser
-# TTS if this endpoint errors out (e.g. edge-tts upstream rate-limited).
+# Server-side TTS via Microsoft Edge neural voices (free, no key).
+# Falls back client-side to the browser SpeechSynthesis if this endpoint errors.
 _TTS_VOICES = {
     "en-GB-female": "en-GB-SoniaNeural",
     "en-GB-male":   "en-GB-RyanNeural",
@@ -1490,20 +1408,18 @@ _DEFAULT_TTS_VOICE = "en-GB-SoniaNeural"
 
 @app.get("/api/tts")
 async def synthesize_tts(text: str = "", voice: str = "", rate: str = "+0%"):
-    """Stream MP3 audio for `text` via Microsoft Edge neural TTS. Rate is a
-    percent string like '-10%' or '+20%' that edge-tts accepts directly."""
     text = (text or "").strip()
     if not text:
         raise HTTPException(400, "text_required")
     if len(text) > 2000:
         raise HTTPException(400, "text_too_long")
-    # Voice can be a friendly alias ("en-GB-female") OR an exact edge-tts voice id.
+    # Voice can be a friendly alias ("en-GB-female") or an exact edge-tts voice id.
     vname = _TTS_VOICES.get(voice) or (voice if voice and "Neural" in voice else _DEFAULT_TTS_VOICE)
-    # Validate rate format defensively (don't let arbitrary user input into the CLI).
+    # Reject anything that isn't [+-]NN%, so we never pass user input through to the CLI.
     if not re.fullmatch(r"[+\-]\d{1,3}%", rate or ""):
         rate = "+0%"
 
-    import edge_tts  # lazy import; keeps module load fast on Render cold-start
+    import edge_tts
 
     async def stream():
         try:
@@ -1512,24 +1428,17 @@ async def synthesize_tts(text: str = "", voice: str = "", rate: str = "+0%"):
                 if chunk.get("type") == "audio" and chunk.get("data"):
                     yield chunk["data"]
         except Exception as e:
-            # Streaming has already started, but we can at least surface in logs.
             print(f"[tts] edge-tts failed: {e}")
 
     return StreamingResponse(
         stream(),
         media_type="audio/mpeg",
-        headers={
-            "Cache-Control": "public, max-age=86400",  # examiner questions repeat
-            "X-TTS-Voice": vname,
-        },
+        headers={"Cache-Control": "public, max-age=86400", "X-TTS-Voice": vname},
     )
 
 
 @app.get("/api/topics")
 def get_topics():
-    """Topics the setup screen can offer. Returns both legacy `topics` (slugs only,
-    backward compat) and `labelled` (list of {value, label}) so the dropdown shows
-    pretty names while POST still sends the slug."""
     keys = sorted(PART1_BANK.keys(), key=_topic_sort_key)
     return {
         "topics": keys,
@@ -1537,13 +1446,10 @@ def get_topics():
     }
 
 
-# ── Sessions (scoped per user) ──
 @app.post("/api/session")
 async def new_session(request: Request):
-    """Create a fresh mock-test session.
-    Optional body: {target_band, accent, p1_topic}. Missing fields fall back to user prefs."""
+    """Body may carry {target_band, accent, p1_topic} — anything missing falls back to user prefs."""
     uid = _require_user(request)
-    body = {}
     try:
         body = await request.json()
     except Exception:
@@ -1551,7 +1457,6 @@ async def new_session(request: Request):
     target_band = body.get("target_band") or None
     accent = body.get("accent") or None
     p1_topic = body.get("p1_topic") or None
-    # Fall back to user prefs for any unset field
     if not (target_band and accent and p1_topic):
         u = _user_row(uid) or {}
         target_band = target_band or u.get("target_band")
@@ -1696,12 +1601,8 @@ def delete_session(sid: str, request: Request):
 
 @app.post("/api/chat")
 async def chat(request: Request):
-    """
-    Append one candidate turn to a session and stream the examiner's reply.
-
-    Body: { session_id: str, user_message: str }   user_message may be "" on resume.
-    Server is authoritative for the transcript — clients only send the new turn.
-    """
+    """Append one candidate turn and stream the examiner's reply via SSE.
+    Server is authoritative for the transcript — clients only send the new turn."""
     uid = _require_user(request)
     body = await request.json()
     sid = body.get("session_id")
@@ -1740,8 +1641,8 @@ async def chat(request: Request):
     # Persist the user turn before streaming so a mid-stream failure doesn't lose it.
     _save_session(sid, history, label, "active", None, user_id=uid)
 
-    # For feedback the transcript is already inside the hint — avoid sending it twice.
     if label == "feedback":
+        # The hint already contains the transcript — don't send it again.
         messages = [
             {"role": "system", "content": hint},
             {"role": "user", "content": "Now produce the feedback report in Chinese as instructed."},
@@ -1750,20 +1651,17 @@ async def chat(request: Request):
         messages = history + [{"role": "system", "content": hint}]
 
     step_initial = phase_step(history)
-    # Use the bigger reasoning model for the feedback turn (7B picks scores by vibe).
-    # The transcript-grounded prompt is long, so bump the context window too.
+    # Feedback turn uses the bigger reasoning model — the 7B picks scores by vibe.
     is_feedback_turn = label == "feedback"
     chosen_model = _pick_feedback_model() if is_feedback_turn else MODEL_NAME
     chosen_ctx = 12288 if is_feedback_turn else 8192
 
-    # Groq doesn't have a baked-in system persona like Ollama's Modelfile, so we
-    # have to embed it ourselves for non-feedback turns.
+    # Groq doesn't bake the examiner persona into the model — inject it here.
     stream_messages = llm_provider.embed_system_prompt(
         messages, kind="feedback" if is_feedback_turn else "examiner"
     )
 
     def event_stream():
-        # First event: tell the client which phase + sub-step + session this stream belongs to.
         yield f"data: {json.dumps({'phase': label, 'step': step_initial, 'session_id': sid})}\n\n"
         full = []
         try:
@@ -1777,9 +1675,8 @@ async def chat(request: Request):
                 if not piece:
                     continue
                 full.append(piece)
-                # For feedback we buffer the whole reply so R1's <think>
-                # reasoning never appears on screen — only the cleaned,
-                # clamped final report is emitted.
+                # Feedback is buffered (and post-processed) before emitting, so
+                # R1's <think> reasoning never reaches the UI.
                 if not is_feedback_turn:
                     yield f"data: {json.dumps({'chunk': piece})}\n\n"
         except Exception as e:
@@ -1789,19 +1686,15 @@ async def chat(request: Request):
                 yield f"data: {json.dumps({'error': 'examiner_error', 'detail': str(e)[:200]})}\n\n"
             return
 
-        # Persist the examiner reply and mark the session complete on feedback.
         reply_text = "".join(full).strip()
         actual_label = label
         if reply_text:
             if is_feedback_turn:
-                # 1) Strip R1's <think>...</think> reasoning blocks
                 reply_text = _strip_think_blocks(reply_text)
-                # 2) Anti-inflation clamp: force every band into server-computed range
+                # Anti-inflation: clamp every band into the server-computed range.
                 stats_for_clamp = _candidate_stats(history)
                 if stats_for_clamp:
                     reply_text = _clamp_feedback(reply_text, stats_for_clamp)
-                # 3) Emit the cleaned, clamped report as ONE chunk (we suppressed
-                #    streaming above so the UI only sees the final version).
                 yield f"data: {json.dumps({'chunk': reply_text})}\n\n"
             history.append({"role": "assistant", "content": reply_text})
             actual_label = derive_phases(history)[-1]

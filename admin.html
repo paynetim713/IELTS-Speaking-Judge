@@ -314,8 +314,8 @@ let _liveReconnectTimer = null;
 let _liveBackoff = 1000;          // start 1s
 let _currentTab = 'overview';
 
+// state ∈ {connected, connecting, off}
 function setLiveDot(state) {
-  // state: 'connected' | 'connecting' | 'off'
   const dot = document.getElementById('liveDot');
   if (!dot) return;
   dot.classList.remove('connected', 'connecting');
@@ -326,7 +326,6 @@ function setLiveDot(state) {
 
 function connectLiveStream() {
   setLiveDot('connecting');
-  // ws:// or wss:// based on current protocol; same origin (admin is on the API)
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = proto + '//' + location.host + '/api/admin/stream';
   try {
@@ -351,7 +350,7 @@ function connectLiveStream() {
 
 function scheduleReconnect() {
   if (_liveReconnectTimer) return;
-  // Exponential backoff: 1s, 2s, 4s, ..., capped at 30s
+  // Exponential backoff: 1s, 2s, 4s, ... capped at 30s.
   const delay = Math.min(_liveBackoff, 30000);
   _liveBackoff = Math.min(_liveBackoff * 2, 30000);
   _liveReconnectTimer = setTimeout(() => {
@@ -362,7 +361,6 @@ function scheduleReconnect() {
 
 function handleLiveEvent(ev) {
   if (ev.type === 'hello' || ev.type === 'ping') return;
-  // Show a toast for any noteworthy event
   if (ev.type === 'signup') {
     toast('signup', '新用户注册', (ev.user && (ev.user.name || ev.user.phone)) || '?');
   } else if (ev.type === 'feedback') {
@@ -377,9 +375,7 @@ function handleLiveEvent(ev) {
   } else if (ev.type === 'user_deleted') {
     toast('signup', '用户已删除', '#' + ev.user_id);
   }
-  // Live-update the current tab where it makes sense
   if (_currentTab === 'overview') {
-    // Cheapest: re-fetch overview
     renderOverview();
   } else if (_currentTab === 'feedback' && ev.type === 'feedback') {
     loadFeedback();
