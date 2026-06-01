@@ -184,6 +184,23 @@ def _init_db():
             )
             """
         )
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS feedback (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       INTEGER,
+                created_at    REAL NOT NULL,
+                rating        INTEGER,
+                category      TEXT,
+                text          TEXT NOT NULL,
+                contact       TEXT,
+                user_agent    TEXT,
+                url           TEXT,
+                resolved      INTEGER DEFAULT 0
+            )
+            """
+        )
+        c.execute("CREATE INDEX IF NOT EXISTS feedback_created_idx ON feedback(created_at DESC)")
     # Additive ALTERs: each in its own connection/transaction so a duplicate-
     # column error on one doesn't poison the others (postgres rolls back the
     # whole transaction on any error; sqlite tolerates per-statement failure
@@ -968,6 +985,101 @@ def healthz():
         "env": IELTS_ENV,
         "llm_provider": llm_provider.PROVIDER,
         "db": _db_mod.kind(),
+    }
+
+
+# ── Beta user feedback ────────────────────────────────────────────────
+# Public POST: anyone (logged in or not) can submit; we still capture user_id
+# when available. GET is gated by ADMIN_FEEDBACK_TOKEN so only the owner can
+# read submissions. Set the env var in Render → Environment.
+_FEEDBACK_RATE = {}  # ip → (count, window_start_ts)
+_FEEDBACK_WINDOW = 60.0       # seconds
+_FEEDBACK_MAX_PER_WINDOW = 5  # per IP
+
+
+def _feedback_rate_limit(request: Request) -> bool:
+    """True if the request should be allowed; False if it tripped the limiter."""
+    ip = (request.client.host if request.client else "?") or "?"
+    now = time.time()
+    count, start = _FEEDBACK_RATE.get(ip, (0, now))
+    if now - start > _FEEDBACK_WINDOW:
+        count, start = 0, now
+    count += 1
+    _FEEDBACK_RATE[ip] = (count, start)
+    return count <= _FEEDBACK_MAX_PER_WINDOW
+
+
+@app.post("/api/feedback")
+async def submit_feedback(request: Request):
+    """Public endpoint. Accepts {rating?, category, text, contact?}. Stores with
+    the current user_id if signed in, else anonymous."""
+    if not _feedback_rate_limit(request):
+        raise HTTPException(429, "rate_limited")
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text or len(text) < 3:
+        raise HTTPException(400, "text_too_short")
+    if len(text) > 4000:
+        raise HTTPException(400, "text_too_long")
+    rating_raw = body.get("rating")
+    rating = None
+    if rating_raw is not None:
+        try:
+            rating = int(rating_raw)
+        except (TypeError, ValueError):
+            rating = None
+        if rating is not None and (rating < 1 or rating > 5):
+            rating = None
+    category = (body.get("category") or "general").strip().lower()
+    if category not in ("bug", "suggestion", "praise", "general"):
+        category = "general"
+    contact = (body.get("contact") or "").strip()[:200] or None
+    url = (body.get("url") or "").strip()[:500] or None
+    ua = (request.headers.get("user-agent") or "")[:300] or None
+    uid = request.session.get("user_id")
+    with _db() as c:
+        c.execute(
+            "INSERT INTO feedback (user_id, created_at, rating, category, text, contact, user_agent, url) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (uid, time.time(), rating, category, text, contact, ua, url),
+        )
+    return {"ok": True}
+
+
+@app.get("/api/feedback")
+def list_feedback(token: str = "", limit: int = 100):
+    """Admin-only: list all feedback. Auth via ?token=... query param matching
+    ADMIN_FEEDBACK_TOKEN env. Locally (dev), defaults to allowing the empty token."""
+    admin_token = os.environ.get("ADMIN_FEEDBACK_TOKEN") or ""
+    if IS_PROD and not admin_token:
+        raise HTTPException(503, "feedback_admin_not_configured")
+    if admin_token and token != admin_token:
+        raise HTTPException(401, "bad_token")
+    limit = max(1, min(int(limit or 100), 500))
+    with _db() as c:
+        cur = c.execute(
+            "SELECT id, user_id, created_at, rating, category, text, contact, user_agent, url, resolved "
+            "FROM feedback ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+        rows = cur.fetchall()
+    return {
+        "count": len(rows),
+        "items": [
+            {
+                "id": r["id"],
+                "user_id": r["user_id"],
+                "created_at": r["created_at"],
+                "rating": r["rating"],
+                "category": r["category"],
+                "text": r["text"],
+                "contact": r["contact"],
+                "user_agent": r["user_agent"],
+                "url": r["url"],
+                "resolved": bool(r["resolved"]),
+            }
+            for r in rows
+        ],
     }
 
 

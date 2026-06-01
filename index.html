@@ -378,6 +378,86 @@ footer {
   animation: fadeIn 0.2s ease-out;
 }
 .auth-overlay.hidden { display: none; }
+
+/* ──────── Feedback widget ──────── */
+#fbToggle {
+  position: fixed; right: 16px; bottom: 16px;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: linear-gradient(135deg, #4a8fff, #2563eb);
+  color: #fff; font-size: 22px; border: none;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+  cursor: pointer; z-index: 150;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+#fbToggle:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(37, 99, 235, 0.6); }
+#fbToggle:active { transform: scale(0.95); }
+
+.fb-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 250; padding: 20px;
+  animation: fadeIn 0.18s ease-out;
+}
+.fb-overlay.hidden { display: none; }
+.fb-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 26px 28px; width: 100%; max-width: 460px;
+  max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+  position: relative;
+}
+.fb-close {
+  position: absolute; top: 12px; right: 14px;
+  background: transparent; border: none; color: #888;
+  font-size: 18px; cursor: pointer; padding: 4px 8px;
+}
+.fb-close:hover { color: #fff; }
+.fb-card h2 { margin: 0 0 4px; font-size: 18px; color: var(--text, #eee); }
+.fb-sub { color: #888; font-size: 12px; margin: 0 0 18px; }
+.fb-row { margin-bottom: 14px; }
+.fb-label { font-size: 12px; color: #aaa; margin-bottom: 6px; font-weight: 500; }
+.fb-stars { display: flex; gap: 4px; }
+.fb-star {
+  background: transparent; border: none; color: #444;
+  font-size: 26px; cursor: pointer; padding: 2px 4px;
+  transition: color 0.1s, transform 0.1s;
+}
+.fb-star:hover { transform: scale(1.15); }
+.fb-star.active { color: #f0b400; }
+.fb-card select, .fb-card textarea, .fb-card input {
+  width: 100%; padding: 8px 10px; background: var(--bg, #1a1d23);
+  border: 1px solid var(--border, #333); color: var(--text, #eee);
+  border-radius: 6px; font-size: 13px; font-family: inherit;
+  box-sizing: border-box;
+}
+.fb-card textarea { resize: vertical; min-height: 90px; }
+.fb-card select:focus, .fb-card textarea:focus, .fb-card input:focus {
+  outline: none; border-color: #4a8fff;
+}
+.fb-error {
+  color: #ff6b6b; font-size: 12px; padding: 8px 10px;
+  background: rgba(255, 107, 107, 0.1); border-radius: 6px; margin-bottom: 10px;
+}
+.fb-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+.fb-btn-primary, .fb-btn-secondary {
+  padding: 9px 18px; border-radius: 7px; font-size: 13px; cursor: pointer;
+  border: 1px solid var(--border, #333); font-family: inherit;
+}
+.fb-btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.fb-btn-primary:hover { background: #1d4ed8; }
+.fb-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.fb-btn-secondary { background: transparent; color: #aaa; }
+.fb-btn-secondary:hover { color: #fff; border-color: #555; }
+.fb-thanks {
+  margin-top: 12px; padding: 14px; text-align: center;
+  background: rgba(34, 197, 94, 0.1); color: #4ade80;
+  border-radius: 8px; font-size: 14px;
+}
+.fb-thanks.hidden { display: none; }
+@media (max-width: 600px) {
+  #fbToggle { bottom: 80px; right: 14px; }  /* avoid collision with mic / mobile keyboard */
+}
 .auth-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 18px; padding: 38px 36px; width: 100%; max-width: 400px;
@@ -589,6 +669,54 @@ footer {
   </div>
 </div>
 
+<!-- ──────── Feedback widget (floating, sticky) ──────── -->
+<button id="fbToggle" type="button" aria-label="Send feedback" title="Send feedback">💬</button>
+<div id="fbOverlay" class="fb-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+  <div class="fb-card">
+    <button type="button" id="fbClose" class="fb-close" aria-label="Close">✕</button>
+    <h2 id="fbTitle" data-i18n="fb.title">Send us feedback</h2>
+    <p class="fb-sub" data-i18n="fb.sub">Beta — your feedback shapes the next release.</p>
+
+    <div class="fb-row">
+      <div class="fb-label" data-i18n="fb.rating">How was your experience?</div>
+      <div id="fbStars" class="fb-stars" role="radiogroup">
+        <button type="button" class="fb-star" data-value="1" aria-label="1 star">★</button>
+        <button type="button" class="fb-star" data-value="2" aria-label="2 stars">★</button>
+        <button type="button" class="fb-star" data-value="3" aria-label="3 stars">★</button>
+        <button type="button" class="fb-star" data-value="4" aria-label="4 stars">★</button>
+        <button type="button" class="fb-star" data-value="5" aria-label="5 stars">★</button>
+      </div>
+    </div>
+
+    <div class="fb-row">
+      <div class="fb-label" data-i18n="fb.category">Type</div>
+      <select id="fbCategory">
+        <option value="bug" data-i18n="fb.cat.bug">Bug</option>
+        <option value="suggestion" selected data-i18n="fb.cat.suggestion">Suggestion</option>
+        <option value="praise" data-i18n="fb.cat.praise">Praise</option>
+        <option value="general" data-i18n="fb.cat.general">General</option>
+      </select>
+    </div>
+
+    <div class="fb-row">
+      <div class="fb-label" data-i18n="fb.text">What's on your mind?</div>
+      <textarea id="fbText" rows="5" maxlength="4000" data-i18n-attrs="placeholder=fb.text.ph" placeholder="Tell us what's working, what's not, what you wish existed..."></textarea>
+    </div>
+
+    <div class="fb-row">
+      <div class="fb-label" data-i18n="fb.contact">Optional — email / WeChat to follow up</div>
+      <input type="text" id="fbContact" maxlength="200" data-i18n-attrs="placeholder=fb.contact.ph" placeholder="leave blank to stay anonymous">
+    </div>
+
+    <div id="fbError" class="fb-error" hidden></div>
+    <div class="fb-actions">
+      <button type="button" id="fbCancel" class="fb-btn-secondary" data-i18n="fb.cancel">Cancel</button>
+      <button type="button" id="fbSubmit" class="fb-btn-primary" data-i18n="fb.submit">Send</button>
+    </div>
+    <div id="fbThanks" class="fb-thanks hidden" data-i18n="fb.thanks">Thanks! Your feedback was received.</div>
+  </div>
+</div>
+
 <div id="authOverlay" class="auth-overlay">
   <div class="auth-card">
     <div class="auth-brand"><span class="brand-dot"></span> <span data-i18n="brand">IELTS Speaking</span></div>
@@ -703,6 +831,79 @@ const setupBand = document.getElementById('setupBand');
 const setupAccent = document.getElementById('setupAccent');
 const setupTopic = document.getElementById('setupTopic');
 const setupTtsTest = document.getElementById('setupTtsTest');
+
+// ──────── Feedback widget ────────
+const fbToggle = document.getElementById('fbToggle');
+const fbOverlay = document.getElementById('fbOverlay');
+const fbClose = document.getElementById('fbClose');
+const fbCancel = document.getElementById('fbCancel');
+const fbSubmit = document.getElementById('fbSubmit');
+const fbStars = document.getElementById('fbStars');
+const fbCategory = document.getElementById('fbCategory');
+const fbText = document.getElementById('fbText');
+const fbContact = document.getElementById('fbContact');
+const fbError = document.getElementById('fbError');
+const fbThanks = document.getElementById('fbThanks');
+let _fbRating = 0;
+
+function openFb() {
+  fbOverlay.classList.remove('hidden');
+  fbThanks.classList.add('hidden');
+  fbError.hidden = true;
+  setTimeout(() => fbText.focus(), 60);
+}
+function closeFb() { fbOverlay.classList.add('hidden'); }
+function setStars(n) {
+  _fbRating = n;
+  fbStars.querySelectorAll('.fb-star').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.value, 10) <= n);
+  });
+}
+if (fbToggle) fbToggle.addEventListener('click', openFb);
+if (fbClose) fbClose.addEventListener('click', closeFb);
+if (fbCancel) fbCancel.addEventListener('click', closeFb);
+if (fbOverlay) fbOverlay.addEventListener('click', (e) => { if (e.target === fbOverlay) closeFb(); });
+if (fbStars) fbStars.querySelectorAll('.fb-star').forEach(b => {
+  b.addEventListener('click', () => setStars(parseInt(b.dataset.value, 10)));
+});
+if (fbSubmit) fbSubmit.addEventListener('click', async () => {
+  const text = (fbText.value || '').trim();
+  if (text.length < 3) {
+    fbError.textContent = t('fb.err.short') || 'Please write at least a few words.';
+    fbError.hidden = false;
+    return;
+  }
+  fbError.hidden = true;
+  fbSubmit.disabled = true;
+  try {
+    const r = await fetch(api('/api/feedback'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rating: _fbRating || null,
+        category: fbCategory.value,
+        text,
+        contact: (fbContact.value || '').trim() || null,
+        url: location.href,
+      }),
+      credentials: CRED,
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.detail || `HTTP ${r.status}`);
+    }
+    fbThanks.classList.remove('hidden');
+    fbText.value = '';
+    fbContact.value = '';
+    setStars(0);
+    setTimeout(closeFb, 1800);
+  } catch (e) {
+    fbError.textContent = (t('fb.err.send') || 'Could not send — try again.') + ' (' + e.message + ')';
+    fbError.hidden = false;
+  } finally {
+    fbSubmit.disabled = false;
+  }
+});
 if (setupTtsTest) {
   setupTtsTest.addEventListener('click', () => {
     // The click itself counts as a user gesture, so audio gets primed inline.
@@ -813,6 +1014,23 @@ const I18N = {
     'setup.tts_test': '试听考官声音',
     'setup.start': '开始测试',
     'setup.starting': '准备中…',
+    'fb.title': '反馈与建议',
+    'fb.sub': '内测中 — 你的反馈会影响下一版。',
+    'fb.rating': '总体体验如何?',
+    'fb.category': '类型',
+    'fb.cat.bug': 'Bug',
+    'fb.cat.suggestion': '建议',
+    'fb.cat.praise': '夸夸',
+    'fb.cat.general': '其他',
+    'fb.text': '想说点什么?',
+    'fb.text.ph': '哪里好用、哪里不好用、希望加什么…',
+    'fb.contact': '可选 — 留邮箱或微信方便追问',
+    'fb.contact.ph': '空着也行,我们不会公开',
+    'fb.cancel': '取消',
+    'fb.submit': '发送',
+    'fb.thanks': '谢谢!反馈已收到。',
+    'fb.err.short': '至少写几个字哦',
+    'fb.err.send': '发送失败,稍后再试',
     'err.bad_target_band': '目标分数值不合法',
     'err.bad_accent': '口音值不合法',
     'err.bad_topic': '主题值不合法',
@@ -893,6 +1111,23 @@ const I18N = {
     'setup.tts_test': 'Test examiner voice',
     'setup.start': 'Start test',
     'setup.starting': 'Starting…',
+    'fb.title': 'Send us feedback',
+    'fb.sub': 'Beta — your feedback shapes the next release.',
+    'fb.rating': 'How was your experience?',
+    'fb.category': 'Type',
+    'fb.cat.bug': 'Bug',
+    'fb.cat.suggestion': 'Suggestion',
+    'fb.cat.praise': 'Praise',
+    'fb.cat.general': 'General',
+    'fb.text': "What's on your mind?",
+    'fb.text.ph': "Tell us what's working, what's not, what you wish existed...",
+    'fb.contact': 'Optional — email / WeChat to follow up',
+    'fb.contact.ph': 'leave blank to stay anonymous',
+    'fb.cancel': 'Cancel',
+    'fb.submit': 'Send',
+    'fb.thanks': 'Thanks! Your feedback was received.',
+    'fb.err.short': 'Please write at least a few words.',
+    'fb.err.send': 'Could not send — try again.',
     'err.bad_target_band': 'Invalid target band value.',
     'err.bad_accent': 'Invalid accent value.',
     'err.bad_topic': 'Invalid topic value.',
