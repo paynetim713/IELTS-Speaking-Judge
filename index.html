@@ -1188,70 +1188,112 @@ function stripForSpeech(text) {
     .trim();
 }
 
-// iOS Safari + Android Chrome: speechSynthesis.speak() is silently no-op
-// unless audio was previously activated by a real user gesture (tap/click).
-// We "prime" the audio session with a near-silent utterance on the user's
-// FIRST tap anywhere in the doc, so the actual examiner speech later works.
+// ──────────── TTS: mobile-hardened ────────────
+// Append `?ttsdebug` to the URL to get a visible diagnostic overlay during speech.
+const TTS_DEBUG = /[?&]ttsdebug\b/.test(location.search);
+const _IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+function ttsLog(msg) {
+  console.log('[tts]', msg);
+  if (!TTS_DEBUG) return;
+  let pane = document.getElementById('_ttsDebugPane');
+  if (!pane) {
+    pane = document.createElement('pre');
+    pane.id = '_ttsDebugPane';
+    pane.style.cssText = 'position:fixed;left:6px;right:6px;bottom:6px;max-height:42vh;overflow:auto;'
+      + 'background:#000c;color:#0f0;font:11px/1.4 monospace;padding:6px;border-radius:6px;'
+      + 'white-space:pre-wrap;z-index:99999;pointer-events:none;';
+    document.body.appendChild(pane);
+  }
+  const ts = new Date().toISOString().slice(11, 23);
+  pane.textContent += `[${ts}] ${msg}\n`;
+  pane.scrollTop = pane.scrollHeight;
+}
+
+// Audio priming: every user-gesture event keeps re-priming on iOS because
+// the audio session can drop between gestures. Cheap (zero-volume space char).
 let _audioPrimed = false;
 function primeAudio() {
-  if (_audioPrimed) return;
-  // Some mobile browsers won't activate unless the utterance has real content,
-  // so use a single character at zero volume.
   try {
+    // Use Force resume in case a previous speak() left the synth paused.
+    speechSynthesis.resume();
     const u = new SpeechSynthesisUtterance(' ');
     u.volume = 0;
     u.rate = 1;
     speechSynthesis.speak(u);
+    if (!_audioPrimed) ttsLog('audio primed (first user gesture)');
     _audioPrimed = true;
-  } catch (_) {}
+  } catch (e) { ttsLog('prime threw: ' + e.message); }
 }
-// First tap, anywhere → prime. capture phase so it runs before any other handler.
-document.addEventListener('pointerdown', primeAudio, { capture: true, once: true });
-document.addEventListener('touchstart', primeAudio, { capture: true, once: true, passive: true });
-document.addEventListener('keydown', primeAudio, { capture: true, once: true });
+// On iOS, audio session can drop between gestures. Re-prime on every tap.
+document.addEventListener('pointerdown', primeAudio, { capture: true, passive: true });
+document.addEventListener('touchstart', primeAudio, { capture: true, passive: true });
+document.addEventListener('keydown', primeAudio, { capture: true });
 
 function speak(text) {
-  if (!ttsOnEl.checked) return;
-  speechSynthesis.cancel();
+  if (!ttsOnEl.checked) { ttsLog('TTS toggle OFF'); return; }
   const clean = stripForSpeech(text);
-  if (!clean) return;
-  // On iOS, the voice list can still be empty here (loaded asynchronously).
-  // Speaking without a voice still works — the browser picks a default.
+  if (!clean) { ttsLog('empty after strip'); return; }
+
+  // On iOS, calling cancel() can leave the synth in a paused state that
+  // ignores future speak()s. Guard with .speaking/.pending check + resume().
+  if (speechSynthesis.speaking || speechSynthesis.pending) {
+    ttsLog('cancel() prior utterance');
+    speechSynthesis.cancel();
+  }
+  speechSynthesis.resume();   // no-op if not paused; fixes the iOS pause-stuck bug
+
   const u = new SpeechSynthesisUtterance(clean);
-  const v = currentVoice();
-  if (v) { u.voice = v; u.lang = v.lang; }
+  // iOS-specific: forcing a voice often makes speech silently fail because the
+  // chosen voice may not be loaded yet. Let iOS pick from the lang only.
+  if (_IS_IOS) {
+    u.lang = (currentVoice() && currentVoice().lang) || 'en-GB';
+    ttsLog(`speak(iOS) lang=${u.lang} chars=${clean.length}`);
+  } else {
+    const v = currentVoice();
+    if (v) { u.voice = v; u.lang = v.lang; }
+    ttsLog(`speak(desktop) voice=${(v && v.name) || 'auto'} chars=${clean.length}`);
+  }
   u.rate = currentRate();
   u.volume = 1;
+  u.pitch = 1;
   let startedAt = 0;
-  u.onstart = () => { startedAt = Date.now(); setStatus('status.speaking', 'speaking'); };
+  u.onstart = () => { startedAt = Date.now(); ttsLog('onstart'); setStatus('status.speaking', 'speaking'); };
   u.onend = () => {
     setStatus('status.ready');
-    // Heuristic: if onend fires under 80ms after onstart (or onstart never fired),
-    // the browser muted us — most often iPhone silent switch on, or page lost
-    // foreground focus. Hint the user once per session.
     const dur = startedAt ? (Date.now() - startedAt) : 0;
+    ttsLog(`onend (${dur}ms, started=${!!startedAt})`);
     if (clean.length > 8 && (!startedAt || dur < 80)) maybeWarnSilentTTS();
   };
-  u.onerror = () => setStatus('status.ready');
+  u.onerror = (e) => { ttsLog('onerror: ' + (e.error || 'unknown')); setStatus('status.ready'); };
   speechSynthesis.speak(u);
+  // Belt-and-suspenders iOS workaround: kick the synth ~50ms later if it's
+  // pending. Some iOS versions need a manual nudge.
+  if (_IS_IOS) {
+    setTimeout(() => {
+      if (speechSynthesis.paused) { ttsLog('synth was paused, resume()'); speechSynthesis.resume(); }
+    }, 80);
+  }
 }
 
 let _ttsWarned = false;
 function maybeWarnSilentTTS() {
   if (_ttsWarned) return;
   _ttsWarned = true;
-  // Lightweight inline warning; no alert() to avoid blocking the chat.
   const banner = document.createElement('div');
-  banner.style.cssText = 'position:fixed;left:0;right:0;bottom:0;padding:10px 14px;'
-    + 'background:#b85a00;color:#fff;font-size:13px;text-align:center;z-index:9999;'
+  banner.style.cssText = 'position:fixed;left:0;right:0;bottom:0;padding:12px 14px;'
+    + 'background:#b85a00;color:#fff;font-size:13px;line-height:1.5;text-align:center;z-index:9999;'
     + 'box-shadow:0 -2px 10px rgba(0,0,0,.3);';
   banner.innerHTML = '🔇 听不见考官声音?<br>'
-    + '• iPhone:检查左侧静音拨片(橙色就是静音)<br>'
-    + '• 用 Safari/Chrome,不要用微信/UC 内置浏览器<br>'
-    + '<span style="text-decoration:underline;cursor:pointer">点这里关闭</span>';
+    + '• <b>iPhone 静音键</b> 检查一下(左侧拨片橙色 = 静音)<br>'
+    + '• <b>iOS 媒体音量</b>:右上角控制中心,确认音量条不是 0<br>'
+    + '• 必须是 <b>Safari</b>,不要用微信/QQ/UC/夸克内置浏览器<br>'
+    + '• 必须是 <b>https://</b> 站点,局域网 IP 的 http:// 不行<br>'
+    + '• 还不行?在 URL 末尾加 <code>?ttsdebug</code> 刷新,把日志截图给我<br>'
+    + '<span style="text-decoration:underline;cursor:pointer">关闭</span>';
   banner.querySelector('span').onclick = () => banner.remove();
   document.body.appendChild(banner);
-  setTimeout(() => banner.remove(), 12000);
+  setTimeout(() => banner.remove(), 16000);
 }
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
