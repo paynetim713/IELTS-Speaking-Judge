@@ -59,16 +59,6 @@ uvicorn webapp:app --port 8000
 # open http://127.0.0.1:8000
 ```
 
-## Deploy to cloud (free)
-
-See **[DEPLOY.md](DEPLOY.md)** for the full Render + Supabase + Groq walkthrough. End-to-end setup is under 15 minutes and stays within all three free tiers:
-
-| Component | Service | Free tier limit |
-|---|---|---|
-| Backend | Render | 750 h/month |
-| Database | Supabase Postgres | 500 MB |
-| LLM | Groq (Llama 3.3 70B) | 30 req/min, 14 400 req/day |
-
 ## Architecture
 
 ```
@@ -147,8 +137,5 @@ All via env vars. See [`.env.example`](.env.example) for the full list.
 - Groq — fastest free LLM inference around
 - Supabase — Postgres made painless
 
-## License
-
-[MIT](LICENSE) — do whatever you want; no warranty.
 
 > This project is an exam preparation aid and is in no way affiliated with or endorsed by Cambridge University Press or IDP IELTS.
