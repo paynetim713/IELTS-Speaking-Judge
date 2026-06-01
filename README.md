@@ -1,13 +1,15 @@
 # IELTS Speaking Judge
 
 <p align="center">
-  <a href="README.md"><img src="https://img.shields.io/badge/English-README-blue?style=for-the-badge" alt="English"></a>
-  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/%E4%B8%AD%E6%96%87-README-red?style=for-the-badge" alt="中文"></a>
-  <a href="README.ar.md"><img src="https://img.shields.io/badge/%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9-README-green?style=for-the-badge" alt="العربية"></a>
+  <strong>Practice IELTS Speaking in your browser with an AI examiner, real test timing, and practical feedback after the session.</strong>
 </p>
 
+<h3 align="center">Choose your language</h3>
+
 <p align="center">
-  <strong>AI-driven IELTS Speaking mock exam — Cambridge-style 3-part test, streaming voice examiner, band-anchored feedback.</strong>
+  <a href="README.md"><img src="https://img.shields.io/badge/English-README-1f6feb?style=for-the-badge&labelColor=0d1117" alt="English README"></a>
+  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/%E4%B8%AD%E6%96%87-README-1f6feb?style=for-the-badge&labelColor=0d1117" alt="中文 README"></a>
+  <a href="README.ar.md"><img src="https://img.shields.io/badge/%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9-README-1f6feb?style=for-the-badge&labelColor=0d1117" alt="Arabic README"></a>
 </p>
 
 <p align="center">
@@ -19,33 +21,39 @@
 
 ---
 
+## Why this project exists
+
+I built **IELTS Speaking Judge** because most speaking practice tools feel too loose: they either ask random questions, give only a score, or do not follow the pressure of the real IELTS Speaking test.
+
+This project tries to keep the practice closer to the actual exam. The examiner goes through the three parts in order, Part 2 has a real preparation and speaking timer, and the final feedback focuses on what the candidate actually said instead of giving a vague comment like “good job”.
+
+It is mainly designed for IELTS learners who want to practise alone, repeat sessions, and understand how to improve their answers step by step.
+
 ## What it does
 
-**IELTS Speaking Judge** is a full IELTS Speaking simulator that replicates the real exam flow.
+The app simulates the IELTS Speaking flow:
 
-It includes:
+- **Intro** — the examiner greets the candidate and asks for their name
+- **Part 1** — short personal questions on one familiar topic
+- **Part 2** — a cue card with 1 minute to prepare and 2 minutes to speak
+- **Part 3** — follow-up questions that move into more abstract opinions
+- **Feedback** — a band-based report with examples from the candidate's own answers and stronger rewrites
 
-- **Intro** — the examiner greets you and asks your name
-- **Part 1** — 4 personal questions on one familiar topic
-- **Part 2** — cue card with a 1-minute preparation timer and a 2-minute long-turn timer
-- **Part 3** — 5 abstract / opinion questions connected to the Part 2 theme
-- **Feedback** — a band-anchored Chinese report with improved answer rewrites
+The browser handles speech recognition and speech playback through the Web Speech API. That means the backend does not need to receive or store raw audio.
 
-Speech-to-text and text-to-speech are handled in the browser through the Web Speech API, so no audio data is sent to the backend.
+## Highlights
 
-## Features
-
-- 71 Part 1 topics
-- 61 Part 2 cue cards
-- 61 Part 3 theme sets
-- Deterministic question selection per session
-- Dual-timer cue card: 60-second preparation and 120-second speaking timer
-- Local Ollama or cloud Groq support
-- SQLite for local development and Postgres for production
+- 71 Part 1 topics, 61 Part 2 cue cards, and 61 Part 3 theme sets
+- Question selection is tied to the session, so the same session can be reviewed later
+- Part 2 includes a built-in preparation timer and speaking timer
+- Feedback is designed around IELTS band descriptors, not just a random AI score
+- Supports **Ollama** for local use and **Groq** for cloud inference
+- Uses **SQLite** for local development and **Postgres** for deployment
+- Single-file frontend, so the project is easy to run and understand
 
 ## Quick start
 
-Requires **Python 3.12+**.
+You need **Python 3.12+**.
 
 ```bash
 git clone https://github.com/paynetim713/IELTS-Speaking-Judge
@@ -58,7 +66,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### Option A — local LLM via Ollama
+### Option A — run with Ollama locally
 
 ```bash
 ollama pull qwen2.5:7b
@@ -66,7 +74,7 @@ ollama create ielts-examiner -f Modelfile.ielts-examiner
 uvicorn webapp:app --port 8000
 ```
 
-### Option B — hosted LLM via Groq
+### Option B — run with Groq
 
 ```bash
 export LLM_PROVIDER=groq
@@ -74,7 +82,7 @@ export GROQ_API_KEY=gsk_your_key_here
 uvicorn webapp:app --port 8000
 ```
 
-Open:
+Then open:
 
 ```text
 http://127.0.0.1:8000
@@ -84,32 +92,38 @@ http://127.0.0.1:8000
 
 ```text
 .
-├── webapp.py                    # FastAPI backend
-├── llm_provider.py              # Ollama / Groq abstraction
-├── db.py                        # SQLite / Postgres abstraction
-├── question_bank.py             # IELTS question bank
-├── build_bank.py                # Question bank builder
-├── extract_speaking.py          # PDF extraction tool
+├── webapp.py                    # FastAPI backend: auth, sessions, chat stream
+├── llm_provider.py              # Ollama / Groq provider wrapper
+├── db.py                        # SQLite / Postgres database wrapper
+├── question_bank.py             # IELTS Speaking question bank
+├── build_bank.py                # Rebuilds the generated question bank
+├── extract_speaking.py          # Extracts speaking questions from PDFs
 ├── cambridge_manual.json        # Manually collected Cambridge questions
-├── Modelfile.ielts-examiner     # Ollama model file
-├── index.html                   # Frontend page
+├── Modelfile.ielts-examiner     # Ollama examiner prompt
+├── index.html                   # Browser frontend
 ├── requirements.txt             # Python dependencies
 ├── render.yaml                  # Render deployment config
-└── DEPLOY.md                    # Deployment guide
+└── DEPLOY.md                    # Deployment notes
 ```
 
 ## Configuration
 
-See [`.env.example`](.env.example) for the full list.
+See [`.env.example`](.env.example) for all available options.
 
 | Variable | Purpose |
 |---|---|
-| `LLM_PROVIDER` | `ollama` or `groq` |
+| `LLM_PROVIDER` | Choose `ollama` or `groq` |
 | `OLLAMA_URL` | Ollama server URL |
-| `GROQ_API_KEY` | Groq API key |
+| `GROQ_API_KEY` | Required when using Groq |
 | `DATABASE_URL` | Database connection URL |
 | `IELTS_SECRET_KEY` | Cookie signing key |
 | `CORS_ORIGINS` | Allowed frontend origins |
+
+## Notes
+
+This is a practice tool, not an official IELTS scoring system. The feedback is meant to help learners notice repeated problems, improve their answers, and practise under a more realistic speaking-test flow.
+
+Browser speech recognition quality can also vary depending on the browser, microphone, accent, and network environment.
 
 ## Acknowledgements
 
@@ -119,4 +133,4 @@ See [`.env.example`](.env.example) for the full list.
 - Groq
 - Supabase
 
-> This project is an exam preparation aid and is not affiliated with or endorsed by Cambridge University Press, IDP IELTS or the British Council.
+> This project is an IELTS preparation aid and is not affiliated with or endorsed by Cambridge University Press, IDP IELTS, or the British Council.
