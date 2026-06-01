@@ -1568,8 +1568,8 @@ speechSynthesis.onvoiceschanged = loadVoices;
 loadVoices();
 voiceSel.addEventListener('change', () => localStorage.setItem(VOICE_KEY, voiceSel.value));
 
-// Override API_BASE when serving the frontend from a different origin:
-//   <script>window.IELTS_API_BASE = 'https://...onrender.com'</script>
+// Override API_BASE when serving the frontend from a different origin by
+// adding this tag in the page head:  <script>window.IELTS_API_BASE='...';<\/script>
 const API_BASE = (typeof window !== 'undefined' && window.IELTS_API_BASE) || '';
 function api(path) { return API_BASE + path; }
 // Cross-origin requests need credentials:'include' to send the session cookie.

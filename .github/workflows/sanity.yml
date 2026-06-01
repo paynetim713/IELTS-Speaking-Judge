@@ -67,3 +67,26 @@ jobs:
             exit 1
           fi
           echo "✓ question_bank.py is reproducible from cambridge_manual.json"
+
+      - name: HTML script-tag sanity (catch </script> leaked into JS)
+        run: python .github/scripts/check_html.py
+
+      - name: End-to-end API smoke test
+        env:
+          IELTS_ENV: dev
+        run: |
+          # Boot the server in the background, wait for /healthz, then exercise
+          # every public + admin endpoint we care about. ANY failure → exit 1.
+          python -m uvicorn webapp:app --port 8765 --log-level warning &
+          SERVER_PID=$!
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:8765/healthz > /dev/null; then break; fi
+            sleep 1
+          done
+          if ! curl -sf http://127.0.0.1:8765/healthz > /dev/null; then
+            echo "Server didn't come up"; kill $SERVER_PID 2>/dev/null; exit 1
+          fi
+          python .github/scripts/e2e.py
+          kill $SERVER_PID 2>/dev/null
+          wait 2>/dev/null
+          echo "✓ e2e smoke OK"
