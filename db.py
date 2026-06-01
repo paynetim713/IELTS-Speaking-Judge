@@ -48,6 +48,11 @@ def _to_pg_sql(sql: str) -> str:
     sql = sql.replace("?", "%s")
     # AUTOINCREMENT → SERIAL
     sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    # IMPORTANT: postgres REAL is 4-byte single precision (~7 significant digits)
+    # while sqlite REAL is 8-byte double. time.time() = 1.7e9 has 10+ digits
+    # before the decimal, so single-precision REAL would round to the nearest
+    # few seconds — silent corruption of timestamps. Force DOUBLE PRECISION.
+    sql = re.sub(r"\bREAL\b", "DOUBLE PRECISION", sql)
     # `excluded.col` works in postgres ON CONFLICT, no change needed.
     # CREATE INDEX IF NOT EXISTS — supported in both.
     # COALESCE — same in both.
