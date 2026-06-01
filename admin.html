@@ -157,12 +157,45 @@ h2 { font-size: 18px; margin: 0 0 16px; font-weight: 600; }
 .tag.active { background: rgba(74, 143, 255, 0.15); color: var(--accent); }
 .tag.resolved { background: rgba(115, 115, 115, 0.2); color: var(--fg-muted); }
 .tag.unread { background: rgba(245, 158, 11, 0.15); color: var(--warn); }
+.tag.banned { background: rgba(239, 68, 68, 0.18); color: var(--danger); }
 .btn-small {
   background: transparent; border: 1px solid var(--border); color: var(--fg-muted);
   padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;
 }
 .btn-small:hover { color: var(--fg); border-color: var(--fg-muted); }
+.btn-small.danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.4); }
+.btn-small.danger:hover { background: rgba(239, 68, 68, 0.1); }
+.btn-small.warn { color: var(--warn); border-color: rgba(245, 158, 11, 0.4); }
+.btn-small.warn:hover { background: rgba(245, 158, 11, 0.1); }
 .feedback-text { max-width: 480px; }
+.live-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #444; margin-right: 6px; vertical-align: middle;
+  transition: background 0.2s;
+}
+.live-dot.connected { background: var(--ok); box-shadow: 0 0 6px var(--ok); animation: pulse 2s infinite; }
+.live-dot.connecting { background: var(--warn); }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  z-index: 1000; min-width: 240px; max-width: 380px;
+  font-size: 13px; animation: slideIn 0.25s ease-out;
+}
+.toast .t-head { font-weight: 600; margin-bottom: 4px; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 0.5px; }
+.toast.signup .t-head { color: var(--ok); }
+.toast.feedback .t-head { color: var(--accent); }
+.toast.session_complete .t-head { color: var(--warn); }
+.toast .t-body { color: var(--fg-muted); }
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
 .empty {
   padding: 40px 20px; text-align: center; color: var(--fg-muted);
   font-style: italic;
@@ -205,7 +238,7 @@ h2 { font-size: 18px; margin: 0 0 16px; font-weight: 600; }
 <!-- ───── App ───── -->
 <div id="app" class="app">
   <div class="topbar">
-    <div class="brand">⚙️ Admin Panel</div>
+    <div class="brand">⚙️ Admin Panel <span id="liveDot" class="live-dot" title="WebSocket status"></span></div>
     <nav>
       <button data-tab="overview" class="active">Overview</button>
       <button data-tab="users">Users</button>
@@ -272,6 +305,102 @@ function enterApp() {
   app.classList.add('active');
   initTabs();
   showTab('overview');
+  connectLiveStream();
+}
+
+// ───── Live WebSocket ─────
+let _liveWs = null;
+let _liveReconnectTimer = null;
+let _liveBackoff = 1000;          // start 1s
+let _currentTab = 'overview';
+
+function setLiveDot(state) {
+  // state: 'connected' | 'connecting' | 'off'
+  const dot = document.getElementById('liveDot');
+  if (!dot) return;
+  dot.classList.remove('connected', 'connecting');
+  if (state === 'connected') dot.classList.add('connected');
+  else if (state === 'connecting') dot.classList.add('connecting');
+  dot.title = 'WebSocket: ' + state;
+}
+
+function connectLiveStream() {
+  setLiveDot('connecting');
+  // ws:// or wss:// based on current protocol; same origin (admin is on the API)
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = proto + '//' + location.host + '/api/admin/stream';
+  try {
+    _liveWs = new WebSocket(url);
+  } catch (e) {
+    setLiveDot('off'); scheduleReconnect(); return;
+  }
+  _liveWs.onopen = () => {
+    setLiveDot('connected');
+    _liveBackoff = 1000;
+  };
+  _liveWs.onmessage = (e) => {
+    try { handleLiveEvent(JSON.parse(e.data)); } catch (_) {}
+  };
+  _liveWs.onerror = () => { setLiveDot('off'); };
+  _liveWs.onclose = () => {
+    setLiveDot('off');
+    _liveWs = null;
+    scheduleReconnect();
+  };
+}
+
+function scheduleReconnect() {
+  if (_liveReconnectTimer) return;
+  // Exponential backoff: 1s, 2s, 4s, ..., capped at 30s
+  const delay = Math.min(_liveBackoff, 30000);
+  _liveBackoff = Math.min(_liveBackoff * 2, 30000);
+  _liveReconnectTimer = setTimeout(() => {
+    _liveReconnectTimer = null;
+    connectLiveStream();
+  }, delay);
+}
+
+function handleLiveEvent(ev) {
+  if (ev.type === 'hello' || ev.type === 'ping') return;
+  // Show a toast for any noteworthy event
+  if (ev.type === 'signup') {
+    toast('signup', '新用户注册', (ev.user && (ev.user.name || ev.user.phone)) || '?');
+  } else if (ev.type === 'feedback') {
+    const f = ev.feedback || {};
+    toast('feedback', '新反馈 ' + (f.rating ? '★'.repeat(f.rating) : ''),
+          (f.text || '').slice(0, 80) + ((f.text || '').length > 80 ? '…' : ''));
+  } else if (ev.type === 'session_complete') {
+    const s = ev.session || {};
+    toast('session_complete', '考试完成', 'Band ' + (s.band || '?') + ' · user ' + (s.user_id || 'anon'));
+  } else if (ev.type === 'user_banned' || ev.type === 'user_unbanned') {
+    toast('signup', ev.type === 'user_banned' ? '用户已封禁' : '用户已解封', '#' + ev.user_id);
+  } else if (ev.type === 'user_deleted') {
+    toast('signup', '用户已删除', '#' + ev.user_id);
+  }
+  // Live-update the current tab where it makes sense
+  if (_currentTab === 'overview') {
+    // Cheapest: re-fetch overview
+    renderOverview();
+  } else if (_currentTab === 'feedback' && ev.type === 'feedback') {
+    loadFeedback();
+  } else if (_currentTab === 'users' && (ev.type === 'signup' || ev.type === 'user_banned' || ev.type === 'user_unbanned' || ev.type === 'user_deleted')) {
+    loadUsers();
+  } else if (_currentTab === 'sessions' && ev.type === 'session_complete') {
+    loadSessions();
+  }
+}
+
+function toast(kind, head, body) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind;
+  t.innerHTML = '<div class="t-head">' + esc(head) + '</div><div class="t-body">' + esc(body) + '</div>';
+  document.body.appendChild(t);
+  setTimeout(() => {
+    t.style.transition = 'opacity 0.3s, transform 0.3s';
+    t.style.opacity = '0';
+    t.style.transform = 'translateX(100%)';
+    setTimeout(() => t.remove(), 320);
+  }, 5500);
 }
 
 // ───── Tabs ─────
@@ -281,6 +410,7 @@ function initTabs() {
   });
 }
 function showTab(name) {
+  _currentTab = name;
   document.querySelectorAll('.topbar nav button').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === name);
   });
@@ -447,10 +577,10 @@ async function loadUsers() {
     <div class="table">
       <table><thead><tr>
         <th>ID</th><th>Phone</th><th>Name</th><th>Target</th><th>Sessions</th>
-        <th>Invites</th><th>Code</th><th>Joined</th><th>Last active</th>
+        <th>Invites</th><th>Code</th><th>Joined</th><th>Last active</th><th>Status</th><th>Actions</th>
       </tr></thead><tbody>
       ${d.items.length ? d.items.map(u => `
-        <tr>
+        <tr style="${u.banned ? 'opacity:0.55;' : ''}">
           <td>${u.id}</td>
           <td><code>${esc(u.phone)}</code></td>
           <td>${esc(u.name || '')}</td>
@@ -460,11 +590,44 @@ async function loadUsers() {
           <td><code class="muted">${esc(u.invite_code || '')}</code></td>
           <td class="muted">${fmtRelative(u.created_at)}</td>
           <td class="muted">${fmtRelative(u.last_active)}</td>
-        </tr>`).join('') : '<tr><td colspan="9" class="empty">No users match</td></tr>'}
+          <td>${u.banned ? '<span class="tag banned">banned</span>' : '<span class="muted">active</span>'}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn-small warn" data-ban="${u.id}" data-state="${u.banned ? 'unban' : 'ban'}">
+              ${u.banned ? '↺ unban' : '⊘ ban'}
+            </button>
+            <button class="btn-small danger" data-delete="${u.id}" data-phone="${esc(u.phone)}">✕ delete</button>
+          </td>
+        </tr>`).join('') : '<tr><td colspan="11" class="empty">No users match</td></tr>'}
       </tbody></table>
     </div>
     <div class="muted" style="margin-top:8px;font-size:12px;">${d.count} users shown</div>
   `;
+  document.querySelectorAll('button[data-ban]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const setBanned = b.dataset.state === 'ban';
+      const verb = setBanned ? '封禁' : '解封';
+      if (!confirm(`确认${verb}用户 #${b.dataset.ban}?`)) return;
+      try {
+        await api('/api/admin/users/' + b.dataset.ban + '/ban', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ banned: setBanned }),
+        });
+        loadUsers();
+      } catch (e) { alert(verb + '失败: ' + e.message); }
+    });
+  });
+  document.querySelectorAll('button[data-delete]').forEach(b => {
+    b.addEventListener('click', async () => {
+      const phone = b.dataset.phone;
+      const id = b.dataset.delete;
+      if (!confirm(`⚠️ 永久删除用户 #${id} (${phone}) ?\n\n这将:\n· 删除该用户所有 session\n· 将其反馈匿名化(保留内容,清空 user_id)\n· 解除其下游邀请关系\n\n不可恢复!`)) return;
+      try {
+        await api('/api/admin/users/' + id, { method: 'DELETE' });
+        loadUsers();
+      } catch (e) { alert('删除失败: ' + e.message); }
+    });
+  });
 }
 
 // ───── Feedback ─────

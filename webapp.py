@@ -10,6 +10,7 @@ Run:
     .\.venv\Scripts\python.exe webapp.py
 """
 
+import asyncio
 import json
 import os
 import random
@@ -21,7 +22,7 @@ from pathlib import Path
 
 import bcrypt
 import requests
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 import llm_provider
 import db as _db_mod
@@ -216,6 +217,7 @@ def _init_db():
         "ALTER TABLE users ADD COLUMN invite_code TEXT",
         "ALTER TABLE users ADD COLUMN referred_by INTEGER",
         "ALTER TABLE users ADD COLUMN favorite_topics TEXT",  # JSON array of slugs
+        "ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0",
     ]:
         try:
             with _db() as c:
@@ -285,7 +287,7 @@ def _user_row(user_id: int):
     with _db() as c:
         row = c.execute(
             "SELECT id, phone, name, target_band, accent, preferred_topic, created_at, "
-            "       invite_code, referred_by, favorite_topics "
+            "       invite_code, referred_by, favorite_topics, banned "
             "FROM users WHERE id = ?", (user_id,)
         ).fetchone()
         if not row:
@@ -948,6 +950,10 @@ async def signup(request: Request):
     else:
         raise HTTPException(409, "phone_taken")
     request.session["user_id"] = user_id
+    _admin_broadcast_sync({
+        "type": "signup",
+        "user": {"id": user_id, "phone": phone, "name": name, "created_at": time.time()},
+    })
     return {"id": user_id, "phone": phone, "name": name, "invite_code": invite_code}
 
 
@@ -960,10 +966,12 @@ async def login(request: Request):
         raise HTTPException(400, "phone_required")
     with _db() as c:
         row = c.execute(
-            "SELECT id, password_hash, name FROM users WHERE phone = ?", (phone,)
+            "SELECT id, password_hash, name, banned FROM users WHERE phone = ?", (phone,)
         ).fetchone()
     if not row or not bcrypt.checkpw(password.encode(), row["password_hash"].encode()):
         raise HTTPException(401, "invalid_credentials")
+    if row["banned"]:
+        raise HTTPException(403, "account_banned")
     request.session["user_id"] = row["id"]
     return {"id": row["id"], "phone": phone, "name": row["name"]}
 
@@ -983,6 +991,10 @@ def me(request: Request):
     if not u:
         request.session.clear()
         raise HTTPException(401, "User not found")
+    if u.get("banned"):
+        # Hard-kick: clear the cookie so the user can't keep poking around.
+        request.session.clear()
+        raise HTTPException(403, "account_banned")
     return u
 
 
@@ -1106,12 +1118,20 @@ async def submit_feedback(request: Request):
     url = (body.get("url") or "").strip()[:500] or None
     ua = (request.headers.get("user-agent") or "")[:300] or None
     uid = request.session.get("user_id")
+    now = time.time()
     with _db() as c:
         c.execute(
             "INSERT INTO feedback (user_id, created_at, rating, category, text, contact, user_agent, url) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (uid, time.time(), rating, category, text, contact, ua, url),
+            (uid, now, rating, category, text, contact, ua, url),
         )
+    _admin_broadcast_sync({
+        "type": "feedback",
+        "feedback": {
+            "user_id": uid, "created_at": now, "rating": rating,
+            "category": category, "text": text[:280], "contact": contact,
+        },
+    })
     return {"ok": True}
 
 
@@ -1127,6 +1147,74 @@ def _admin_token() -> str:
 def _require_admin(request: Request):
     if not request.session.get("is_admin"):
         raise HTTPException(401, "admin_required")
+
+
+# ── Live admin event bus (in-process; one Render dyno = fine) ──────────
+# WebSocket connections from /admin clients. We broadcast small JSON events
+# (signup/feedback/session_start/session_complete/user_banned/user_deleted)
+# so the panel updates without polling.
+_admin_ws_clients: set[WebSocket] = set()
+_admin_ws_lock = asyncio.Lock()
+
+
+async def _admin_broadcast(event: dict):
+    """Fan out an event to every connected admin WebSocket. Silently drops
+    dead connections. Safe to call from any async path."""
+    if not _admin_ws_clients:
+        return
+    payload = json.dumps(event, default=str, ensure_ascii=False)
+    dead = []
+    async with _admin_ws_lock:
+        clients = list(_admin_ws_clients)
+    for ws in clients:
+        try:
+            await ws.send_text(payload)
+        except Exception:
+            dead.append(ws)
+    if dead:
+        async with _admin_ws_lock:
+            for ws in dead:
+                _admin_ws_clients.discard(ws)
+
+
+def _admin_broadcast_sync(event: dict):
+    """Schedule an _admin_broadcast from sync code (e.g. signup, which is in an
+    async route but the broadcasts happen after a sync DB block). Uses the
+    running loop; in tests with no loop, just no-ops."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    loop.create_task(_admin_broadcast(event))
+
+
+@app.websocket("/api/admin/stream")
+async def admin_ws_stream(ws: WebSocket):
+    # SessionMiddleware also populates ws.session for WebSockets.
+    if not ws.session.get("is_admin"):
+        await ws.close(code=4401)  # custom code: unauthorized
+        return
+    await ws.accept()
+    async with _admin_ws_lock:
+        _admin_ws_clients.add(ws)
+    try:
+        # Initial hello so the client knows the link is live
+        await ws.send_text(json.dumps({"type": "hello", "ts": time.time()}))
+        # Keep the socket open; we don't expect client messages, but reading
+        # gracefully detects disconnection.
+        while True:
+            try:
+                await asyncio.wait_for(ws.receive_text(), timeout=30)
+            except asyncio.TimeoutError:
+                # Send a ping; some load balancers cut idle WS at 30-60s.
+                await ws.send_text(json.dumps({"type": "ping", "ts": time.time()}))
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        async with _admin_ws_lock:
+            _admin_ws_clients.discard(ws)
 
 
 @app.get("/admin")
@@ -1225,7 +1313,7 @@ def admin_users(request: Request, limit: int = 200, q: str = ""):
             like = f"%{q}%"
             cur = c.execute(
                 "SELECT id, phone, name, target_band, accent, preferred_topic, created_at, "
-                "       invite_code, referred_by "
+                "       invite_code, referred_by, banned "
                 "FROM users WHERE phone LIKE ? OR name LIKE ? "
                 "ORDER BY created_at DESC LIMIT ?",
                 (like, like, limit),
@@ -1233,7 +1321,7 @@ def admin_users(request: Request, limit: int = 200, q: str = ""):
         else:
             cur = c.execute(
                 "SELECT id, phone, name, target_band, accent, preferred_topic, created_at, "
-                "       invite_code, referred_by "
+                "       invite_code, referred_by, banned "
                 "FROM users ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             )
@@ -1315,6 +1403,49 @@ async def admin_resolve_feedback(fb_id: int, request: Request):
     with _db() as c:
         c.execute("UPDATE feedback SET resolved = ? WHERE id = ?", (1 if resolved else 0, fb_id))
     return {"ok": True, "resolved": resolved}
+
+
+@app.post("/api/admin/users/{uid}/ban")
+async def admin_ban_user(uid: int, request: Request):
+    _require_admin(request)
+    body = await request.json() if request.headers.get("content-length") else {}
+    banned = bool(body.get("banned", True))
+    with _db() as c:
+        cur = c.execute("SELECT id, phone, name FROM users WHERE id = ?", (uid,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "user_not_found")
+        c.execute("UPDATE users SET banned = ? WHERE id = ?", (1 if banned else 0, uid))
+    # Push live event so other admin tabs update
+    await _admin_broadcast({
+        "type": "user_banned" if banned else "user_unbanned",
+        "user_id": uid, "phone": row["phone"], "name": row["name"], "banned": banned,
+    })
+    return {"ok": True, "banned": banned}
+
+
+@app.delete("/api/admin/users/{uid}")
+async def admin_delete_user(uid: int, request: Request):
+    """Hard delete a user. Their sessions are removed entirely; their feedback
+    is preserved but anonymized (user_id → NULL) so we keep the signal without
+    keeping their identity."""
+    _require_admin(request)
+    with _db() as c:
+        cur = c.execute("SELECT id, phone, name FROM users WHERE id = ?", (uid,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "user_not_found")
+        # Order matters: anonymize feedback first, then drop sessions, then user.
+        c.execute("UPDATE feedback SET user_id = NULL WHERE user_id = ?", (uid,))
+        c.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
+        # Detach anyone who was referred by this user (don't cascade — keeps their account)
+        c.execute("UPDATE users SET referred_by = NULL WHERE referred_by = ?", (uid,))
+        c.execute("DELETE FROM users WHERE id = ?", (uid,))
+    await _admin_broadcast({
+        "type": "user_deleted",
+        "user_id": uid, "phone": row["phone"], "name": row["name"],
+    })
+    return {"ok": True, "deleted": uid}
 
 
 @app.get("/api/feedback")
@@ -1686,6 +1817,15 @@ async def chat(request: Request):
             reply_text if is_fb else None,
             user_id=uid,
         )
+        if is_fb:
+            _admin_broadcast_sync({
+                "type": "session_complete",
+                "session": {
+                    "id": sid, "user_id": uid,
+                    "band": _extract_band(reply_text),
+                    "updated_at": time.time(),
+                },
+            })
         yield "data: {\"done\": true}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
