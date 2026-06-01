@@ -50,6 +50,13 @@ def _strip_think_blocks(text: str) -> str:
 
 
 def _pick_feedback_model() -> str:
+    # Hosted providers don't need a multi-model fallback — there's no "pull"
+    # concept, the model the user configured is either reachable or it isn't.
+    # Trying alternates here would just send DeepSeek model names to Groq (or
+    # vice versa). The Ollama fallback chain is the only reason this dance
+    # exists in the first place.
+    if llm_provider.FEEDBACK_PROVIDER != "ollama":
+        return llm_provider.feedback_model()
     for name in FEEDBACK_MODEL_CANDIDATES:
         if _model_available(name):
             return name
