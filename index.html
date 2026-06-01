@@ -1,0 +1,1819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IELTS Speaking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Visual language adapted from Vercel AI Chatbot + shadcn/ui patterns:
+   monochrome dark, soft borders, generous whitespace, single accent. */
+:root {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface-2: #171717;
+  --border: #262626;
+  --border-strong: #3f3f3f;
+  --fg: #fafafa;
+  --fg-muted: #a3a3a3;
+  --fg-subtle: #737373;
+  --accent: #60a5fa;
+  --accent-glow: rgba(96, 165, 250, 0.15);
+  --success: #4ade80;
+  --warn: #facc15;
+  --danger: #f87171;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: 'Inter', -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg); color: var(--fg);
+  font-feature-settings: 'cv11', 'ss03';
+  -webkit-font-smoothing: antialiased;
+}
+body { display: flex; flex-direction: column; height: 100vh; }
+
+/* ───────── Header ───────── */
+header {
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px;
+  background: var(--surface);
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+.brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.spacer { flex: 1; }
+.opts { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--fg-muted); }
+.opts select {
+  background: var(--surface-2); color: var(--fg); border: 1px solid var(--border);
+  padding: 5px 8px; border-radius: 6px; font: inherit; font-size: 12px;
+}
+.opts label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.opts input[type=checkbox] { accent-color: var(--accent); }
+
+/* ───────── Phase strip ───────── */
+.phases {
+  display: flex; justify-content: center; gap: 4px;
+  padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.phase {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--fg-subtle); padding: 6px 14px; border-radius: 999px;
+  border: 1px solid transparent; transition: all 0.2s;
+}
+.phase.done { color: var(--fg-muted); }
+.phase.active {
+  color: var(--accent); border-color: var(--accent); background: var(--accent-glow);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.06);
+}
+.phase-step {
+  font-size: 10px; letter-spacing: 0.02em; text-transform: none;
+  opacity: 0; color: var(--accent);
+  font-variant-numeric: tabular-nums; max-width: 0; overflow: hidden;
+  transition: opacity 0.2s, max-width 0.25s ease-out;
+}
+.phase.active .phase-step { opacity: 0.85; max-width: 80px; }
+
+/* ───────── Chat log ───────── */
+main { flex: 1; overflow-y: auto; }
+#log { max-width: 760px; margin: 0 auto; padding: 28px 24px 12px; }
+.msg { display: flex; gap: 12px; margin-bottom: 20px; }
+.msg.you { flex-direction: row-reverse; }
+.avatar {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; flex: 0 0 32px;
+}
+.msg.examiner .avatar { background: var(--accent); color: #0a0a0a; }
+.msg.you .avatar { background: var(--surface-2); color: var(--fg-muted); border: 1px solid var(--border); }
+.bubble {
+  padding: 12px 16px; border-radius: 14px; line-height: 1.55; font-size: 14.5px;
+  max-width: 80%; white-space: pre-wrap; word-wrap: break-word;
+}
+.msg.examiner .bubble { background: var(--surface); border: 1px solid var(--border); }
+.msg.you .bubble { background: var(--accent); color: #0a0a0a; font-weight: 500; }
+.msg.feedback .bubble {
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  max-width: 100%; font-size: 14px;
+  padding: 22px 26px;
+}
+
+/* ───────── Part 2 cue card ───────── */
+.msg.cue-card { margin-top: 32px; }
+.msg.cue-card .bubble {
+  background: linear-gradient(180deg, #1d1812 0%, #161410 100%);
+  border: 1px solid #3a342a;
+  max-width: 88%;
+  padding: 18px 22px 20px;
+  position: relative;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.4);
+}
+.msg.cue-card .cue-label {
+  position: absolute; top: -10px; left: 18px;
+  background: var(--warn); color: #1a1410;
+  font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 4px;
+  letter-spacing: 0.08em;
+}
+.cue-leadin {
+  color: var(--fg-muted); font-size: 12.5px; font-style: italic;
+  margin-bottom: 14px; padding-bottom: 12px;
+  border-bottom: 1px dashed #3a342a; line-height: 1.5;
+}
+.cue-topic {
+  font-size: 17px; font-weight: 600; color: var(--fg);
+  margin: 4px 0 14px; letter-spacing: -0.01em;
+}
+.cue-prompt {
+  font-size: 12px; color: var(--fg-subtle);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin: 10px 0 6px; font-weight: 600;
+}
+.cue-bullets {
+  margin: 4px 0 14px; padding-left: 22px; font-size: 14px;
+  color: var(--fg); line-height: 1.6;
+}
+.cue-bullets li { margin: 3px 0; }
+.cue-explain {
+  font-size: 14px; color: var(--fg); font-weight: 500;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px dashed #3a342a; line-height: 1.55;
+}
+
+/* ───────── Feedback report card ───────── */
+.fb-overall {
+  display: flex; align-items: baseline; gap: 14px;
+  padding-bottom: 18px; margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.fb-overall-num {
+  font-size: 52px; font-weight: 700; color: var(--accent);
+  line-height: 0.9; letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.fb-overall-label {
+  font-size: 12px; color: var(--fg-muted);
+  text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;
+}
+.fb-bars {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px;
+  margin-bottom: 4px;
+}
+.fb-bar { font-size: 12px; }
+.fb-bar-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 5px; color: var(--fg-muted);
+}
+.fb-bar-name { font-weight: 500; }
+.fb-bar-num {
+  color: var(--fg); font-weight: 700; font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.fb-bar-track {
+  height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.fb-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--success));
+  border-radius: 3px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fb-section-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--fg-subtle); font-weight: 700; margin: 22px 0 10px;
+}
+.fb-issues { padding-left: 22px; margin: 0; font-size: 13.5px; color: var(--fg); }
+.fb-issues li { margin: 7px 0; line-height: 1.55; }
+.fb-advice {
+  padding: 12px 14px; background: var(--bg);
+  border-left: 3px solid var(--accent); border-radius: 4px;
+  font-size: 13.5px; color: var(--fg); line-height: 1.55;
+}
+.bubble.interim { color: var(--fg-muted); font-style: italic; }
+.bubble h2 { font-size: 14px; margin: 14px 0 6px; color: var(--fg); font-weight: 600; }
+.bubble h2:first-child { margin-top: 2px; }
+.bubble table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
+.bubble th, .bubble td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+.bubble th { background: var(--surface); font-weight: 600; }
+.bubble code { background: var(--surface); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+
+/* ───────── Composer ───────── */
+footer {
+  border-top: 1px solid var(--border); background: var(--surface);
+  padding: 14px 24px 20px;
+}
+.composer { max-width: 760px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+#mic {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--accent); color: #0a0a0a; border: none;
+  height: 44px; padding: 0 18px; border-radius: 12px; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: 600;
+  transition: all 0.15s; flex: 0 0 auto;
+}
+#mic:hover { transform: translateY(-1px); box-shadow: 0 6px 16px var(--accent-glow); }
+#mic:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+#mic.recording { background: var(--danger); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.45); }
+  50% { box-shadow: 0 0 0 10px rgba(248,113,113,0); }
+}
+#mic svg { width: 16px; height: 16px; }
+#textInput {
+  flex: 1; height: 44px;
+  background: var(--surface-2); color: var(--fg); border: 1px solid var(--border);
+  padding: 0 14px; border-radius: 12px; font: inherit; font-size: 14px;
+  transition: border 0.15s;
+}
+#textInput:focus { outline: none; border-color: var(--accent); }
+.icon-btn {
+  height: 44px; padding: 0 14px;
+  background: transparent; color: var(--fg-muted);
+  border: 1px solid var(--border); border-radius: 12px;
+  cursor: pointer; font: inherit; font-size: 13px;
+  transition: all 0.15s;
+}
+.icon-btn:hover { color: var(--fg); border-color: var(--border-strong); background: var(--surface-2); }
+.icon-btn.warn:hover { color: var(--warn); }
+.icon-btn.danger:hover { color: var(--danger); }
+
+.status-row {
+  max-width: 760px; margin: 6px auto 0;
+  font-size: 12px; color: var(--fg-subtle); text-align: center;
+  height: 16px; transition: color 0.2s;
+}
+.status-row.recording { color: var(--danger); }
+.status-row.thinking { color: var(--accent); }
+.status-row.speaking { color: var(--success); }
+
+/* ───────── Header nav button ───────── */
+.nav-link {
+  background: transparent; color: var(--fg-muted); border: 1px solid var(--border);
+  padding: 6px 12px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s;
+}
+.nav-link:hover { color: var(--fg); border-color: var(--border-strong); background: var(--surface-2); }
+.nav-link:disabled { opacity: 0.4; cursor: not-allowed; }
+.nav-link.danger { color: var(--fg-muted); }
+.nav-link.danger:hover { color: var(--danger); border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.06); }
+
+/* ───────── Icon-only button (gear, etc) ───────── */
+.icon-only-btn {
+  background: transparent; color: var(--fg-muted); border: 1px solid var(--border);
+  padding: 7px; border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.icon-only-btn:hover { color: var(--fg); border-color: var(--border-strong); background: var(--surface-2); }
+.icon-only-btn svg { width: 16px; height: 16px; }
+
+/* ───────── Settings rows ───────── */
+.settings-list { display: flex; flex-direction: column; gap: 4px; }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 0; border-bottom: 1px solid var(--border); gap: 16px;
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-label { font-size: 13px; color: var(--fg); }
+.settings-hint { font-size: 11px; color: var(--fg-subtle); margin-top: 3px; }
+.settings-row select {
+  background: var(--surface-2); color: var(--fg); border: 1px solid var(--border);
+  padding: 7px 10px; border-radius: 6px; font: inherit; font-size: 12px;
+  min-width: 240px; max-width: 320px;
+}
+.settings-row input[type=checkbox] { accent-color: var(--accent); transform: scale(1.25); cursor: pointer; }
+.settings-row input[type=text] {
+  background: var(--surface-2); color: var(--fg); border: 1px solid var(--border);
+  padding: 8px 12px; border-radius: 7px; font: inherit; font-size: 13px;
+  min-width: 220px;
+}
+.settings-row input[type=text]:focus { outline: none; border-color: var(--accent); }
+.setup-start {
+  width: 100%; height: 44px; margin-top: 18px;
+  background: var(--accent); color: #0a0a0a; border: none;
+  border-radius: 9px; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600;
+  transition: all 0.15s;
+}
+.setup-start:hover { transform: translateY(-1px); box-shadow: 0 6px 18px var(--accent-glow); }
+.setup-start:disabled { opacity: 0.55; cursor: wait; transform: none; box-shadow: none; }
+
+/* ───────── Part 2 cue card timer ───────── */
+.cue-timer {
+  max-width: 760px; margin: 14px auto 0;
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 16px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 12px;
+  font-size: 13px; animation: fadeIn 0.2s ease-out;
+}
+.cue-timer.hidden { display: none; }
+.cue-timer-label {
+  color: var(--fg); font-weight: 500; min-width: 150px;
+  font-variant-numeric: tabular-nums; display: flex; gap: 6px; align-items: baseline;
+}
+.cue-timer-time { font-variant-numeric: tabular-nums; font-weight: 700; }
+.cue-timer-bar {
+  flex: 1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.cue-timer-fill {
+  height: 100%; background: var(--accent); border-radius: 3px;
+  transition: width 1s linear, background 0.3s;
+}
+.cue-timer.warning .cue-timer-fill { background: var(--warn); }
+.cue-timer.danger  .cue-timer-fill { background: var(--danger); }
+.cue-timer.danger .cue-timer-label { color: var(--danger); }
+.settings-rate { display: flex; align-items: center; gap: 10px; min-width: 240px; }
+.settings-rate input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+.settings-rate-num {
+  font-size: 12px; color: var(--fg); font-weight: 600;
+  font-variant-numeric: tabular-nums; min-width: 46px; text-align: right;
+}
+
+/* ───────── Overlay (history modal) ───────── */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 60px 20px; z-index: 50;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.15s ease-out;
+}
+.overlay.hidden { display: none; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.overlay-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 22px 24px; width: 100%; max-width: 640px;
+  max-height: 82vh; overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+}
+.overlay-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.overlay-head h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+
+/* ───────── History list ───────── */
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+.history-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 10px;
+  transition: border 0.15s;
+}
+.history-row:hover { border-color: var(--border-strong); }
+.history-row .row-main { flex: 1; min-width: 0; }
+.history-row .row-when { font-size: 13px; color: var(--fg); margin-bottom: 4px; }
+.history-row .row-meta { font-size: 11px; color: var(--fg-muted); display: flex; gap: 6px; flex-wrap: wrap; }
+.history-row .row-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.badge { padding: 2px 7px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); }
+.badge.active { color: var(--accent); border-color: rgba(96,165,250,0.4); }
+.badge.complete { color: var(--success); border-color: rgba(74,222,128,0.4); }
+.badge.band { color: var(--warn); border-color: rgba(250,204,21,0.4); font-weight: 600; }
+.badge.current { color: var(--fg); border-color: var(--border-strong); }
+.history-empty { color: var(--fg-muted); font-size: 13px; text-align: center; padding: 28px; }
+
+/* ───────── Auth screen (full-screen login / signup gate) ───────── */
+.auth-overlay {
+  position: fixed; inset: 0; background: radial-gradient(circle at 30% 20%, #161a22 0%, #0a0a0a 70%);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+.auth-overlay.hidden { display: none; }
+.auth-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 18px; padding: 38px 36px; width: 100%; max-width: 400px;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+}
+.auth-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 18px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px;
+}
+.auth-tagline {
+  font-size: 13px; color: var(--fg-muted); margin-bottom: 26px;
+}
+.auth-tabs {
+  display: flex; gap: 2px; margin-bottom: 22px;
+  background: var(--bg); padding: 3px; border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.auth-tab {
+  flex: 1; background: transparent; color: var(--fg-muted); border: none;
+  padding: 8px 12px; border-radius: 7px; font: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s;
+}
+.auth-tab.active { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+.auth-field { margin-bottom: 14px; }
+.auth-field label {
+  display: block; font-size: 11px; color: var(--fg-muted);
+  margin-bottom: 6px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.auth-field input {
+  width: 100%; height: 42px;
+  background: var(--surface-2); color: var(--fg); border: 1px solid var(--border);
+  padding: 0 14px; border-radius: 9px; font: inherit; font-size: 14px;
+  transition: border 0.15s;
+}
+.auth-field input:focus { outline: none; border-color: var(--accent); }
+.auth-submit {
+  width: 100%; height: 44px; margin-top: 6px;
+  background: var(--accent); color: #0a0a0a; border: none;
+  border-radius: 9px; cursor: pointer; font: inherit; font-size: 14px; font-weight: 600;
+  transition: all 0.15s;
+}
+.auth-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 18px var(--accent-glow); }
+.auth-submit:disabled { opacity: 0.55; cursor: wait; transform: none; box-shadow: none; }
+.auth-error {
+  background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.35);
+  color: var(--danger); padding: 10px 12px; border-radius: 7px;
+  font-size: 12.5px; margin-bottom: 14px; display: none;
+}
+.auth-error.show { display: block; }
+.auth-foot {
+  margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--fg-subtle); text-align: center;
+}
+
+/* ───────── User chip + dropdown (header) ───────── */
+.user-chip {
+  display: flex; align-items: center; gap: 8px;
+  background: transparent; color: var(--fg); border: 1px solid var(--border);
+  padding: 4px 12px 4px 4px; border-radius: 999px;
+  cursor: pointer; font: inherit; font-size: 12px;
+  transition: all 0.15s;
+}
+.user-chip:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.user-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); color: #0a0a0a;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 11px; text-transform: uppercase;
+}
+.user-name { font-weight: 500; }
+.user-menu {
+  position: absolute; top: 56px; right: 24px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 10px; padding: 6px;
+  min-width: 220px; z-index: 60;
+  box-shadow: 0 14px 38px rgba(0,0,0,0.5);
+  animation: fadeIn 0.12s ease-out;
+}
+.user-menu.hidden { display: none; }
+.user-menu-email {
+  padding: 10px 12px 12px; font-size: 11px; color: var(--fg-subtle);
+  border-bottom: 1px solid var(--border); margin-bottom: 4px;
+  word-break: break-all;
+}
+.user-menu-item {
+  display: block; width: 100%; text-align: left;
+  background: transparent; color: var(--fg); border: none;
+  padding: 9px 12px; border-radius: 6px; cursor: pointer;
+  font: inherit; font-size: 13px;
+}
+.user-menu-item:hover { background: var(--surface-2); }
+.user-menu-item.danger:hover { color: var(--danger); }
+
+/* ───────── Caret on streaming bubble ───────── */
+.bubble.streaming::after {
+  content: ''; display: inline-block; width: 8px; height: 14px;
+  background: var(--accent); margin-left: 3px; vertical-align: -2px;
+  animation: blink 0.9s steps(2) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="brand-dot"></span> <span data-i18n="brand">IELTS Speaking</span></div>
+  <button class="nav-link" id="historyBtn" type="button" data-i18n="nav.history">History</button>
+  <div class="spacer"></div>
+  <button class="icon-only-btn" id="settingsBtn" type="button" data-i18n-attrs="title=nav.settings;aria-label=nav.settings" title="Settings" aria-label="Settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+  <button class="user-chip" id="userBtn" type="button" style="display:none">
+    <span class="user-avatar" id="userAvatar">U</span>
+    <span class="user-name" id="userName">User</span>
+  </button>
+</header>
+
+<div id="userMenu" class="user-menu hidden">
+  <div class="user-menu-email" id="userMenuEmail"></div>
+  <button class="user-menu-item danger" id="logoutBtn" type="button" data-i18n="user.signout">Sign out</button>
+</div>
+
+<div class="phases" id="phases">
+  <span class="phase" data-p="intro"><span class="phase-name" data-i18n="phase.intro">Intro</span><span class="phase-step"></span></span>
+  <span class="phase" data-p="part1"><span class="phase-name" data-i18n="phase.part1">Part 1</span><span class="phase-step"></span></span>
+  <span class="phase" data-p="part2"><span class="phase-name" data-i18n="phase.part2">Part 2</span><span class="phase-step"></span></span>
+  <span class="phase" data-p="part3"><span class="phase-name" data-i18n="phase.part3">Part 3</span><span class="phase-step"></span></span>
+  <span class="phase" data-p="feedback"><span class="phase-name" data-i18n="phase.feedback">Feedback</span><span class="phase-step"></span></span>
+</div>
+
+<main><div id="log"></div></main>
+
+<footer>
+  <div class="composer">
+    <button id="mic" title="Tap to start/stop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      <span id="micLabel" data-i18n="composer.speak">Speak</span>
+    </button>
+    <input id="textInput" data-i18n-attrs="placeholder=composer.placeholder" placeholder="Or type your answer (Enter to send)">
+    <button id="feedbackBtn" class="icon-btn warn" data-i18n="composer.end">End</button>
+    <button id="resetBtn" class="icon-btn danger" data-i18n="composer.reset">Reset</button>
+  </div>
+  <div id="status" class="status-row">Ready</div>
+</footer>
+
+<div id="historyPanel" class="overlay hidden" aria-hidden="true">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <h2 data-i18n="history.title">Past mock tests</h2>
+      <button class="nav-link" id="closeHistoryBtn" type="button" data-i18n="settings.close">Close</button>
+    </div>
+    <div id="historyList" class="history-list"></div>
+  </div>
+</div>
+
+<div id="setupOverlay" class="overlay hidden">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <h2 data-i18n="setup.title">Start a mock test</h2>
+    </div>
+    <div class="settings-list">
+      <div class="settings-row">
+        <div>
+          <div class="settings-label" data-i18n="setup.name">Your name</div>
+          <div class="settings-hint" data-i18n="setup.name.hint">How the examiner addresses you</div>
+        </div>
+        <input type="text" id="setupName" maxlength="40">
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label" data-i18n="setup.target">Target band</div>
+          <div class="settings-hint" data-i18n="setup.target.hint">Calibrates the feedback report</div>
+        </div>
+        <select id="setupBand">
+          <option value="" data-i18n="setup.target.any">No target</option>
+          <option value="5.5">5.5</option>
+          <option value="6.0">6.0</option>
+          <option value="6.5">6.5</option>
+          <option value="7.0">7.0</option>
+          <option value="7.5">7.5</option>
+          <option value="8.0">8.0+</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label" data-i18n="setup.accent">Recognition accent</div>
+          <div class="settings-hint" data-i18n="setup.accent.hint">Accent the microphone listens for</div>
+        </div>
+        <select id="setupAccent">
+          <option value="en-GB">British English (en-GB)</option>
+          <option value="en-US">American English (en-US)</option>
+          <option value="en-AU">Australian English (en-AU)</option>
+          <option value="en-IN">Indian English (en-IN)</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label" data-i18n="setup.topic">Part 1 topic</div>
+          <div class="settings-hint" data-i18n="setup.topic.hint">Random or pick one</div>
+        </div>
+        <select id="setupTopic">
+          <option value="" data-i18n="setup.topic.random">Random</option>
+        </select>
+      </div>
+    </div>
+    <button class="setup-start" id="setupStart" type="button" data-i18n="setup.start">Start test</button>
+  </div>
+</div>
+
+<div id="authOverlay" class="auth-overlay">
+  <div class="auth-card">
+    <div class="auth-brand"><span class="brand-dot"></span> <span data-i18n="brand">IELTS Speaking</span></div>
+    <div class="auth-tagline" id="authTagline" data-i18n="auth.tagline">Sign in to start a mock test</div>
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab active" data-mode="login" role="tab" data-i18n="auth.tab.login">Sign in</button>
+      <button type="button" class="auth-tab"        data-mode="signup" role="tab" data-i18n="auth.tab.signup">Create account</button>
+    </div>
+    <div id="authError" class="auth-error"></div>
+    <form id="authForm" autocomplete="on" novalidate>
+      <div class="auth-field" id="nameField" style="display:none">
+        <label for="authName" data-i18n="auth.field.name">Name (optional)</label>
+        <input type="text" id="authName" autocomplete="nickname" maxlength="60" data-i18n-attrs="placeholder=auth.field.name.ph" placeholder="">
+      </div>
+      <div class="auth-field">
+        <label for="authPhone" data-i18n="auth.field.phone">Phone number</label>
+        <input type="tel" id="authPhone" autocomplete="tel" inputmode="numeric" maxlength="13" required data-i18n-attrs="placeholder=auth.field.phone.ph" placeholder="">
+      </div>
+      <div class="auth-field">
+        <label for="authPassword" data-i18n="auth.field.password">Password</label>
+        <input type="password" id="authPassword" autocomplete="current-password" required minlength="6" data-i18n-attrs="placeholder=auth.field.password.ph" placeholder="">
+      </div>
+      <button type="submit" class="auth-submit" id="authSubmit" data-i18n="auth.submit.login">Sign in</button>
+    </form>
+    <div class="auth-foot" data-i18n="auth.foot">Data stays on this server. No third-party tracking.</div>
+  </div>
+</div>
+
+<div id="settingsPanel" class="overlay hidden" aria-hidden="true">
+  <div class="overlay-card">
+    <div class="overlay-head">
+      <h2 data-i18n="settings.title">Settings</h2>
+      <button class="nav-link" id="closeSettingsBtn" type="button" data-i18n="settings.close">Close</button>
+    </div>
+    <div class="settings-list">
+      <div class="settings-row">
+        <div>
+          <div class="settings-label" data-i18n="settings.lang">Interface language</div>
+          <div class="settings-hint" data-i18n="settings.lang.hint">Chinese / English</div>
+        </div>
+        <select id="langSel">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label" data-i18n="settings.voice">Examiner voice</div>
+          <div class="settings-hint" data-i18n="settings.voice.hint">Browser-provided text-to-speech</div>
+        </div>
+        <select id="voiceSel"></select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label" data-i18n="settings.recog">Speech recognition</div>
+          <div class="settings-hint" data-i18n="settings.recog.hint">Accent the microphone listens for</div>
+        </div>
+        <select id="recogLangSel">
+          <option value="en-GB">British English (en-GB)</option>
+          <option value="en-US">American English (en-US)</option>
+          <option value="en-AU">Australian English (en-AU)</option>
+          <option value="en-IN">Indian English (en-IN)</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label" data-i18n="settings.tts">Read examiner replies aloud</div>
+          <div class="settings-hint" data-i18n="settings.tts.hint">Toggle text-to-speech</div>
+        </div>
+        <input type="checkbox" id="ttsOn" checked>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-label" data-i18n="settings.rate">Speech rate</div>
+          <div class="settings-hint" data-i18n="settings.rate.hint">How fast the examiner speaks</div>
+        </div>
+        <div class="settings-rate">
+          <input type="range" id="ttsRate" min="0.6" max="1.3" step="0.05" value="0.95">
+          <span class="settings-rate-num" id="ttsRateNum">0.95×</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+//──────────── DOM ────────────
+const log = document.getElementById('log');
+const statusEl = document.getElementById('status');
+const micBtn = document.getElementById('mic');
+const micLabel = document.getElementById('micLabel');
+const textInput = document.getElementById('textInput');
+const feedbackBtn = document.getElementById('feedbackBtn');
+const resetBtn = document.getElementById('resetBtn');
+const voiceSel = document.getElementById('voiceSel');
+const ttsOnEl = document.getElementById('ttsOn');
+const phaseEls = Array.from(document.querySelectorAll('.phase'));
+const historyBtn = document.getElementById('historyBtn');
+const historyPanel = document.getElementById('historyPanel');
+const historyList = document.getElementById('historyList');
+const closeHistoryBtn = document.getElementById('closeHistoryBtn');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsPanel = document.getElementById('settingsPanel');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const recogLangSel = document.getElementById('recogLangSel');
+const ttsRateEl = document.getElementById('ttsRate');
+const ttsRateNumEl = document.getElementById('ttsRateNum');
+const langSel = document.getElementById('langSel');
+const setupOverlay = document.getElementById('setupOverlay');
+const setupName = document.getElementById('setupName');
+const setupBand = document.getElementById('setupBand');
+const setupAccent = document.getElementById('setupAccent');
+const setupTopic = document.getElementById('setupTopic');
+const setupStart = document.getElementById('setupStart');
+const authOverlay = document.getElementById('authOverlay');
+const authError = document.getElementById('authError');
+const authForm = document.getElementById('authForm');
+const authSubmit = document.getElementById('authSubmit');
+const authTabs = Array.from(document.querySelectorAll('.auth-tab'));
+const authName = document.getElementById('authName');
+const authPhone = document.getElementById('authPhone');
+const authPassword = document.getElementById('authPassword');
+const nameField = document.getElementById('nameField');
+const userBtn = document.getElementById('userBtn');
+const userAvatar = document.getElementById('userAvatar');
+const userName = document.getElementById('userName');
+const userMenu = document.getElementById('userMenu');
+const userMenuEmail = document.getElementById('userMenuEmail');
+const logoutBtn = document.getElementById('logoutBtn');
+
+//──────────── State ────────────
+const SESSION_KEY = 'ielts.sessionId';
+let sessionId = null;            // server-side session id, persists across refresh
+let history = [];                // local mirror of server transcript, for rendering
+let isStreaming = false;
+let recognition = null;
+let isRecording = false;
+let voices = [];
+let pendingFeedback = false;     // user just sent a feedback trigger → next reply IS feedback
+
+//──────────── i18n ────────────
+const I18N = {
+  zh: {
+    'brand': 'IELTS 口语',
+    'nav.history': '历史',
+    'nav.settings': '设置',
+    'phase.intro': '开场', 'phase.part1': 'Part 1', 'phase.part2': 'Part 2',
+    'phase.part3': 'Part 3', 'phase.feedback': '反馈',
+    'step.cuecard': '任务卡', 'step.wrapup': '收尾',
+    'composer.speak': '说话', 'composer.stop': '停',
+    'composer.placeholder': '或键入回答(回车发送)',
+    'composer.placeholder.complete': '本场测试已结束 — 点重置开新场',
+    'composer.end': '结束', 'composer.reset': '重置', 'composer.end_chip': '结束 → 反馈',
+    'status.ready': '就绪',
+    'status.listening': '正在听 — 点 停 或停顿后结束',
+    'status.thinking': '考官思考中…',
+    'status.speaking': '考官说话中 — 按 Esc 跳过',
+    'status.mic_error': '麦克风出错:{0}',
+    'status.prev_complete': '上一场测试已完成 — 点重置开新场',
+    'status.feedback_delivered': '反馈已生成 — 点重置开新场',
+    'status.no_input': '未检测到输入,结束',
+    'settings.title': '设置', 'settings.close': '关闭',
+    'settings.lang': '界面语言', 'settings.lang.hint': '中文 / English',
+    'settings.voice': '考官音色', 'settings.voice.hint': '浏览器内置语音合成',
+    'settings.recog': '语音识别口音', 'settings.recog.hint': '麦克风识别用的口音模型',
+    'settings.tts': '朗读考官回复', 'settings.tts.hint': '开关文本转语音',
+    'settings.rate': '语速', 'settings.rate.hint': '考官说话速度',
+    'history.title': '历史测试',
+    'history.empty': '还没有测试 — 完成一场会出现在这里',
+    'history.loading': '加载中…',
+    'history.status.active': '进行中', 'history.status.complete': '已完成',
+    'history.q': '题', 'history.band': '分', 'history.current': '当前',
+    'history.open': '打开', 'history.delete': '删除',
+    'history.delete.confirm': '永久删除这场测试?',
+    'history.failed': '加载失败:{0}',
+    'auth.tagline': '登录后开始模拟测试',
+    'auth.tab.login': '登录', 'auth.tab.signup': '注册',
+    'auth.field.name': '昵称(可选)',
+    'auth.field.name.ph': '想让考官怎么称呼你',
+    'auth.field.phone': '手机号', 'auth.field.phone.ph': '11 位手机号',
+    'auth.field.password': '密码', 'auth.field.password.ph': '至少 6 位',
+    'auth.submit.login': '登录', 'auth.submit.signup': '注册并开始',
+    'auth.submit.loginning': '登录中…', 'auth.submit.signing': '创建中…',
+    'auth.foot': '数据仅存于本机服务器,无第三方追踪',
+    'auth.error.required': '请填写手机号和密码',
+    'auth.error.phone_format': '手机号格式不对(11 位,1 开头)',
+    'auth.error.password_short': '密码至少 6 位',
+    'auth.error.generic': '失败,请重试',
+    'user.signout': '退出登录',
+    'feedback.overall': '总分',
+    'feedback.dim.fc': '流利与连贯',
+    'feedback.dim.lex': '词汇',
+    'feedback.dim.gram': '语法',
+    'feedback.dim.pron': '发音',
+    'feedback.issues': '主要问题', 'feedback.advice': '一句话建议',
+    'cue.label': '任务卡 · PART 2',
+    'err.phone_invalid': '请输入有效的 11 位手机号(如 138xxxxxxxx)',
+    'err.password_short': '密码至少 6 位',
+    'err.phone_required': '请输入手机号',
+    'err.phone_taken': '该手机号已注册,请直接登录',
+    'err.invalid_credentials': '手机号或密码不正确',
+    'err.not_authenticated': '请先登录',
+    'err.ollama_down': '本地考官模型暂时连不上。请确认 Ollama 桌面应用在运行(系统托盘里看一下),稍后重试。',
+    'err.examiner_error': '考官回复出错:{0}',
+    'setup.title': '开始一场模拟测试',
+    'setup.name': '昵称', 'setup.name.hint': '考官会怎么称呼你',
+    'setup.target': '目标分', 'setup.target.hint': '用于校准反馈报告',
+    'setup.target.any': '不设目标',
+    'setup.accent': '识别口音', 'setup.accent.hint': '麦克风识别用的英语口音',
+    'setup.topic': 'Part 1 主题', 'setup.topic.hint': '随机或指定',
+    'setup.topic.random': '随机',
+    'setup.start': '开始测试',
+    'setup.starting': '准备中…',
+    'err.bad_target_band': '目标分数值不合法',
+    'err.bad_accent': '口音值不合法',
+    'err.bad_topic': '主题值不合法',
+    'cue_timer.prep_label': '准备时间',
+    'cue_timer.talk_label': '长答时间',
+    'cue_timer.skip': '开始说',
+    'cue_timer.done': '完成',
+    'cue_timer.time_up': '时间到',
+  },
+  en: {
+    'brand': 'IELTS Speaking',
+    'nav.history': 'History', 'nav.settings': 'Settings',
+    'phase.intro': 'Intro', 'phase.part1': 'Part 1', 'phase.part2': 'Part 2',
+    'phase.part3': 'Part 3', 'phase.feedback': 'Feedback',
+    'step.cuecard': 'cue card', 'step.wrapup': 'wrap-up',
+    'composer.speak': 'Speak', 'composer.stop': 'Stop',
+    'composer.placeholder': 'Or type your answer (Enter to send)',
+    'composer.placeholder.complete': 'This test is finished — Reset to start a new one',
+    'composer.end': 'End', 'composer.reset': 'Reset', 'composer.end_chip': 'End → feedback',
+    'status.ready': 'Ready',
+    'status.listening': 'Listening — tap Stop or pause to finish',
+    'status.thinking': 'Examiner thinking…',
+    'status.speaking': 'Examiner speaking — press Esc to cut',
+    'status.mic_error': 'Mic error: {0}',
+    'status.prev_complete': 'Previous test complete — Reset to start a new one',
+    'status.feedback_delivered': 'Feedback delivered — Reset to start over',
+    'status.no_input': 'No input — ending test',
+    'settings.title': 'Settings', 'settings.close': 'Close',
+    'settings.lang': 'Interface language', 'settings.lang.hint': 'Chinese / English',
+    'settings.voice': 'Examiner voice', 'settings.voice.hint': 'Browser-provided text-to-speech',
+    'settings.recog': 'Speech recognition', 'settings.recog.hint': 'Accent the microphone listens for',
+    'settings.tts': 'Read examiner replies aloud', 'settings.tts.hint': 'Toggle text-to-speech',
+    'settings.rate': 'Speech rate', 'settings.rate.hint': 'How fast the examiner speaks',
+    'history.title': 'Past mock tests',
+    'history.empty': 'No tests yet — finish one and it will appear here',
+    'history.loading': 'Loading…',
+    'history.status.active': 'active', 'history.status.complete': 'complete',
+    'history.q': 'Q', 'history.band': 'Band', 'history.current': 'current',
+    'history.open': 'Open', 'history.delete': 'Delete',
+    'history.delete.confirm': 'Delete this session permanently?',
+    'history.failed': 'Failed to load: {0}',
+    'auth.tagline': 'Sign in to start a mock test',
+    'auth.tab.login': 'Sign in', 'auth.tab.signup': 'Create account',
+    'auth.field.name': 'Name (optional)',
+    'auth.field.name.ph': 'How the examiner should address you',
+    'auth.field.phone': 'Phone number', 'auth.field.phone.ph': '11-digit phone number',
+    'auth.field.password': 'Password', 'auth.field.password.ph': 'At least 6 characters',
+    'auth.submit.login': 'Sign in', 'auth.submit.signup': 'Create account',
+    'auth.submit.loginning': 'Signing in…', 'auth.submit.signing': 'Creating account…',
+    'auth.foot': 'Data stays on this server. No third-party tracking.',
+    'auth.error.required': 'Phone and password required.',
+    'auth.error.phone_format': 'Invalid phone format (11 digits starting with 1).',
+    'auth.error.password_short': 'Password must be at least 6 characters.',
+    'auth.error.generic': 'Failed. Please try again.',
+    'user.signout': 'Sign out',
+    'feedback.overall': 'Overall band',
+    'feedback.dim.fc': 'Fluency & coherence',
+    'feedback.dim.lex': 'Lexical resource',
+    'feedback.dim.gram': 'Grammatical range',
+    'feedback.dim.pron': 'Pronunciation',
+    'feedback.issues': 'Key issues', 'feedback.advice': 'One-line advice',
+    'cue.label': 'TASK CARD · PART 2',
+    'err.phone_invalid': 'Please enter a valid 11-digit phone number (e.g. 138xxxxxxxx).',
+    'err.password_short': 'Password must be at least 6 characters.',
+    'err.phone_required': 'Phone number required.',
+    'err.phone_taken': 'That phone is already registered. Please sign in instead.',
+    'err.invalid_credentials': 'Invalid phone or password.',
+    'err.not_authenticated': 'Please sign in.',
+    'err.ollama_down': "Can't reach the local examiner model. Make sure the Ollama desktop app is running (check your system tray), then retry.",
+    'err.examiner_error': 'Examiner reply failed: {0}',
+    'setup.title': 'Start a mock test',
+    'setup.name': 'Your name', 'setup.name.hint': 'How the examiner addresses you',
+    'setup.target': 'Target band', 'setup.target.hint': 'Calibrates the feedback report',
+    'setup.target.any': 'No target',
+    'setup.accent': 'Recognition accent', 'setup.accent.hint': 'Accent the microphone listens for',
+    'setup.topic': 'Part 1 topic', 'setup.topic.hint': 'Random or pick one',
+    'setup.topic.random': 'Random',
+    'setup.start': 'Start test',
+    'setup.starting': 'Starting…',
+    'err.bad_target_band': 'Invalid target band value.',
+    'err.bad_accent': 'Invalid accent value.',
+    'err.bad_topic': 'Invalid topic value.',
+    'cue_timer.prep_label': 'Preparation',
+    'cue_timer.talk_label': 'Speaking time',
+    'cue_timer.skip': "I'm ready",
+    'cue_timer.done': 'Done',
+    'cue_timer.time_up': "Time's up",
+  },
+};
+
+const LANG_KEY = 'ielts.lang';
+let currentLang = (() => {
+  const saved = localStorage.getItem(LANG_KEY);
+  if (saved && I18N[saved]) return saved;
+  return /^zh/i.test(navigator.language || '') ? 'zh' : 'en';
+})();
+
+function t(key, ...args) {
+  let s = (I18N[currentLang] && I18N[currentLang][key]) ?? I18N.en[key] ?? key;
+  args.forEach((a, i) => { s = s.replace('{' + i + '}', a); });
+  return s;
+}
+
+function applyI18n() {
+  document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-attrs]').forEach(el => {
+    el.dataset.i18nAttrs.split(';').forEach(spec => {
+      const [attr, key] = spec.split('=').map(s => s.trim());
+      if (attr && key) el.setAttribute(attr, t(key));
+    });
+  });
+  // dynamic regions: re-paint status / phase / composer / log
+  repaintStatus();
+  if (_lastPhase) setPhase(_lastPhase.label, _lastPhase.step);
+  if (typeof setSessionComplete === 'function') setSessionComplete(_complete);
+  if (typeof restoreLog === 'function' && history && history.length) restoreLog(history);
+}
+
+function setLang(lang) {
+  if (!I18N[lang]) return;
+  currentLang = lang;
+  localStorage.setItem(LANG_KEY, lang);
+  applyI18n();
+}
+
+//──────────── Status ────────────
+let _statusKey = 'status.ready';
+let _statusArgs = [];
+let _statusCls = '';
+function setStatus(keyOrText, klass='', ...args) {
+  // backwards-compatible: if key is an i18n key, translate; else use as plain text
+  const isKey = keyOrText && typeof keyOrText === 'string' && /^[a-z]+\.[a-z_.]+$/i.test(keyOrText) && (I18N.en[keyOrText] || I18N.zh[keyOrText]);
+  _statusKey = isKey ? keyOrText : null;
+  _statusArgs = args;
+  _statusCls = klass;
+  statusEl.textContent = isKey ? t(keyOrText, ...args) : keyOrText;
+  statusEl.className = 'status-row ' + klass;
+}
+function repaintStatus() {
+  if (_statusKey) statusEl.textContent = t(_statusKey, ..._statusArgs);
+}
+
+//──────────── Session-complete lockout ────────────
+let _complete = false;
+function setSessionComplete(complete) {
+  _complete = complete;
+  micBtn.disabled = complete;
+  textInput.disabled = complete;
+  feedbackBtn.disabled = complete;
+  textInput.placeholder = t(complete ? 'composer.placeholder.complete' : 'composer.placeholder');
+}
+
+//──────────── Phase strip (driven by the server, single source of truth) ────────────
+const PHASE_ORDER = ['intro', 'part1', 'part2', 'part3', 'feedback'];
+let _lastPhase = null;
+function localizeStep(step) {
+  if (!step) return '';
+  if (step === 'cue card') return t('step.cuecard');
+  if (step === 'wrap-up') return t('step.wrapup');
+  return step;
+}
+function setPhase(label, step) {
+  const idx = PHASE_ORDER.indexOf(label);
+  if (idx < 0) return;
+  _lastPhase = { label, step };
+  const localized = localizeStep(step);
+  phaseEls.forEach(el => {
+    const i = PHASE_ORDER.indexOf(el.dataset.p);
+    el.classList.remove('active', 'done');
+    if (i < idx) el.classList.add('done');
+    else if (i === idx) el.classList.add('active');
+    const stepEl = el.querySelector('.phase-step');
+    if (stepEl) stepEl.textContent = (i === idx && localized) ? '· ' + localized : '';
+  });
+}
+
+//──────────── Rich content rendering (cue card + feedback report) ────────────
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function isCueCardText(text) {
+  const low = (text || '').toLowerCase();
+  let hits = 0;
+  ['one to two minutes', 'you should say', 'and explain'].forEach(m => { if (low.includes(m)) hits++; });
+  return hits >= 2;
+}
+
+function renderCueCard(el, text) {
+  const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+  const leadIn = [], bullets = [];
+  let topic = '', say = '', explain = '';
+  let stage = 'leadin';
+  for (const L of lines) {
+    if (/^describe\s/i.test(L)) { topic = L; stage = 'after-topic'; continue; }
+    if (/^you\s+should\s+say/i.test(L)) { say = L; stage = 'bullets'; continue; }
+    if (stage === 'bullets' && /^[-•*]\s+/.test(L)) { bullets.push(L.replace(/^[-•*]\s+/, '')); continue; }
+    if (/^and\s+explain/i.test(L)) { explain = L; stage = 'done'; continue; }
+    if (stage === 'leadin') leadIn.push(L);
+  }
+  const parts = [`<div class="cue-label">${escapeHtml(t('cue.label'))}</div>`];
+  if (leadIn.length) parts.push(`<div class="cue-leadin">${escapeHtml(leadIn.join(' '))}</div>`);
+  if (topic) parts.push(`<div class="cue-topic">${escapeHtml(topic)}</div>`);
+  if (say) parts.push(`<div class="cue-prompt">${escapeHtml(say.replace(/[:：]$/, ''))}</div>`);
+  if (bullets.length) parts.push(`<ul class="cue-bullets">${bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>`);
+  if (explain) parts.push(`<div class="cue-explain">${escapeHtml(explain)}</div>`);
+  el.innerHTML = parts.length > 1 ? parts.join('') : escapeHtml(text);
+}
+
+const SCORE_RE = /F&C\s*([\d.]+)\s*\|\s*Lex\s*([\d.]+)\s*\|\s*Gram\s*([\d.]+)\s*\|\s*Pron\s*([\d.]+)\s*\|\s*Overall\s*([\d.]+)/i;
+function parseFeedback(text) {
+  const out = { scores: {}, issues: [], advice: '' };
+  const m = text.match(SCORE_RE);
+  if (m) {
+    out.scores = {
+      fc: +m[1], lex: +m[2], gram: +m[3], pron: +m[4], overall: +m[5],
+    };
+  }
+  // Issues block: between "## 主要问题" and "## 一句话建议"
+  const issuesMatch = text.match(/##\s*主要问题[^\n]*\n([\s\S]*?)(?=##\s*一句话建议|$)/);
+  if (issuesMatch) {
+    const lines = issuesMatch[1].split('\n').map(L => L.trim()).filter(Boolean);
+    for (const L of lines) {
+      const m2 = L.match(/^\d+[.、]\s*(.+)$/);
+      if (m2) out.issues.push(m2[1].trim());
+      else if (out.issues.length) out.issues[out.issues.length - 1] += ' ' + L;
+    }
+  }
+  const adviceMatch = text.match(/##\s*一句话建议[^\n]*\n([\s\S]+)$/);
+  if (adviceMatch) out.advice = adviceMatch[1].trim().split('\n').filter(L => L.trim())[0] || '';
+  return out;
+}
+
+function renderFeedback(el, text) {
+  const { scores, issues, advice } = parseFeedback(text);
+  const has = scores.overall != null || issues.length || advice;
+  if (!has) { renderMarkdown(el, text); return; }
+  const parts = [];
+  if (scores.overall != null) {
+    parts.push(`<div class="fb-overall">
+      <div class="fb-overall-num">${scores.overall.toFixed(1)}</div>
+      <div class="fb-overall-label">${escapeHtml(t('feedback.overall'))}</div>
+    </div>`);
+    const rows = [
+      [t('feedback.dim.fc'),   'fc'],   [t('feedback.dim.lex'), 'lex'],
+      [t('feedback.dim.gram'), 'gram'], [t('feedback.dim.pron'), 'pron'],
+    ];
+    parts.push(`<div class="fb-bars">${rows.map(([name, k]) => {
+      const v = scores[k];
+      const pct = v != null ? Math.max(8, v / 9 * 100) : 0;
+      const num = v != null ? v.toFixed(1) : '—';
+      return `<div class="fb-bar">
+        <div class="fb-bar-head"><span class="fb-bar-name">${escapeHtml(name)}</span><span class="fb-bar-num">${num}</span></div>
+        <div class="fb-bar-track"><div class="fb-bar-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('')}</div>`);
+  }
+  if (issues.length) {
+    parts.push(`<div class="fb-section-title">${escapeHtml(t('feedback.issues'))}</div>`);
+    parts.push(`<ol class="fb-issues">${issues.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ol>`);
+  }
+  if (advice) {
+    parts.push(`<div class="fb-section-title">${escapeHtml(t('feedback.advice'))}</div>`);
+    parts.push(`<div class="fb-advice">${escapeHtml(advice)}</div>`);
+  }
+  el.innerHTML = parts.join('');
+}
+
+//──────────── Markdown (tiny) ────────────
+function renderMarkdown(el, text) {
+  let html = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/((?:\|[^\n]+\|\n)+)/g, (m) => {
+    const rows = m.trim().split('\n').filter(r => r.startsWith('|'));
+    const cells = rows.map(r => r.split('|').slice(1, -1).map(c => c.trim()));
+    if (cells.length < 2) return m;
+    const header = cells[0];
+    const body = cells.slice(2);
+    let t = '<table><thead><tr>' + header.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+    body.forEach(row => { t += '<tr>' + row.map(c => `<td>${c}</td>`).join('') + '</tr>'; });
+    t += '</tbody></table>';
+    return t;
+  });
+  el.innerHTML = html;
+}
+
+//──────────── Log rendering ────────────
+function addMsg(role, klass) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + (klass || role);
+  const initial = role === 'examiner' ? 'E' : 'Y';
+  div.innerHTML = `<div class="avatar">${initial}</div><div class="bubble"></div>`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div.querySelector('.bubble');
+}
+
+//──────────── TTS ────────────
+const VOICE_KEY = 'ielts.voiceName';
+function pickDefaultVoice(list) {
+  // Prefer a British examiner-like voice, then any en-GB, then any English.
+  return list.find(v => /en[-_]GB/i.test(v.lang) && /(British|UK|Sonia|Ryan|Libby|George|Hazel)/i.test(v.name))
+      || list.find(v => /en[-_]GB/i.test(v.lang))
+      || list.find(v => /^en/i.test(v.lang))
+      || list[0];
+}
+function loadVoices() {
+  const all = speechSynthesis.getVoices();
+  voices = all.filter(v => /^en/i.test(v.lang));
+  if (!voices.length) return;            // not ready yet — onvoiceschanged will re-fire
+  const saved = localStorage.getItem(VOICE_KEY);
+  voiceSel.innerHTML = '';
+  voices.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.name;                  // stable key, survives re-population
+    opt.textContent = `${v.name} — ${v.lang}`;
+    voiceSel.appendChild(opt);
+  });
+  const want = (saved && voices.some(v => v.name === saved))
+      ? saved
+      : (pickDefaultVoice(voices) || {}).name;
+  if (want) voiceSel.value = want;
+}
+function currentVoice() {
+  return voices.find(v => v.name === voiceSel.value) || voices[0] || null;
+}
+speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices();
+voiceSel.addEventListener('change', () => localStorage.setItem(VOICE_KEY, voiceSel.value));
+
+// API base URL. Same-origin by default; override at build time by setting
+//   window.IELTS_API_BASE = 'https://your-app.onrender.com'
+// in a tiny <script> block before this file. Used so the static frontend on
+// Cloudflare Pages can call the API on Render.
+const API_BASE = (typeof window !== 'undefined' && window.IELTS_API_BASE) || '';
+function api(path) { return API_BASE + path; }
+// All API requests must carry the session cookie; in cross-origin mode the
+// browser only sends it when credentials: 'include' is set.
+const CRED = API_BASE ? 'include' : 'same-origin';
+
+const RECOG_KEY = 'ielts.recogLang';
+recogLangSel.value = localStorage.getItem(RECOG_KEY) || 'en-GB';
+recogLangSel.addEventListener('change', () => localStorage.setItem(RECOG_KEY, recogLangSel.value));
+
+const TTS_RATE_KEY = 'ielts.ttsRate';
+function currentRate() { return parseFloat(ttsRateEl.value || '0.95'); }
+function paintRate() { ttsRateNumEl.textContent = currentRate().toFixed(2) + '×'; }
+ttsRateEl.value = parseFloat(localStorage.getItem(TTS_RATE_KEY) || '0.95');
+paintRate();
+ttsRateEl.addEventListener('input', () => {
+  paintRate();
+  localStorage.setItem(TTS_RATE_KEY, ttsRateEl.value);
+});
+
+langSel.value = currentLang;
+langSel.addEventListener('change', () => setLang(langSel.value));
+
+function stripForSpeech(text) {
+  return text
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/^#+\s.*$/gm, '')
+    .replace(/^\s*[-*]\s+/gm, ', ')
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/→.*$/gm, '')
+    .replace(/\*\*/g, '')
+    .replace(/[*_`|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function speak(text) {
+  if (!ttsOnEl.checked) return;
+  speechSynthesis.cancel();
+  const clean = stripForSpeech(text);
+  if (!clean) return;
+  const u = new SpeechSynthesisUtterance(clean);
+  const v = currentVoice();
+  if (v) { u.voice = v; u.lang = v.lang; }
+  u.rate = currentRate();
+  u.onstart = () => setStatus('status.speaking', 'speaking');
+  u.onend = () => setStatus('status.ready');
+  u.onerror = () => setStatus('status.ready');
+  speechSynthesis.speak(u);
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (!historyPanel.classList.contains('hidden')) { closeHistory(); return; }
+    if (!settingsPanel.classList.contains('hidden')) { closeSettings(); return; }
+    speechSynthesis.cancel(); setStatus('status.ready');
+  }
+});
+
+//──────────── STT ────────────
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) {
+  alert('This browser does not support Web Speech API. Open in Chrome or Edge.');
+}
+
+function startRecognition() {
+  if (isRecording || !SR) return;
+  speechSynthesis.cancel();
+
+  recognition = new SR();
+  recognition.lang = recogLangSel.value || 'en-GB';
+  recognition.interimResults = true;
+  recognition.continuous = true;
+
+  let finalTranscript = '';
+  let bubble = null;
+
+  recognition.onstart = () => {
+    isRecording = true;
+    micBtn.classList.add('recording');
+    micLabel.dataset.i18n = 'composer.stop';
+    micLabel.textContent = t('composer.stop');
+    setStatus('status.listening', 'recording');
+    bubble = addMsg('you', 'you');
+    bubble.classList.add('interim');
+  };
+  recognition.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalTranscript += t + ' ';
+      else interim += t;
+    }
+    if (bubble) bubble.textContent = (finalTranscript + interim).trim();
+  };
+  recognition.onerror = e => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    setStatus('status.mic_error', '', e.error);
+  };
+  recognition.onend = () => {
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    micLabel.dataset.i18n = 'composer.speak';
+    micLabel.textContent = t('composer.speak');
+    const text = finalTranscript.trim();
+    if (bubble) {
+      bubble.classList.remove('interim');
+      if (!text) bubble.parentElement.remove();
+      else bubble.textContent = text;
+    }
+    if (text) sendUser(text);
+    else setStatus('status.ready');
+  };
+  recognition.start();
+}
+
+function stopRecognition() { if (recognition && isRecording) recognition.stop(); }
+micBtn.onclick = () => isRecording ? stopRecognition() : startRecognition();
+
+textInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && textInput.value.trim()) {
+    const t = textInput.value.trim();
+    textInput.value = '';
+    addMsg('you', 'you').textContent = t;
+    sendUser(t);
+  }
+});
+
+//──────────── Feedback detection ────────────
+function isFeedbackText(text) {
+  // New compact template uses '## 评分' header; old one used '评分报告'
+  return /##\s*评分|评分报告|F&C\s*\d|Lexical Resource|Grammatical Range/i.test(text);
+}
+const FEEDBACK_TRIGGERS = /^(feedback now|stop|end|exit|end the test|end → feedback|end -> feedback|结束|反馈)$/i;
+
+//──────────── Sessions ────────────
+async function ensureSession() {
+  const saved = localStorage.getItem(SESSION_KEY);
+  if (saved) {
+    const r = await fetch(api('/api/session/') + encodeURIComponent(saved), { credentials: CRED });
+    if (r.ok) {
+      const data = await r.json();
+      sessionId = data.id;
+      history = data.history || [];
+      restoreLog(history);
+      setPhase(data.phase || 'intro', data.step);
+      const done = data.status === 'complete';
+      setSessionComplete(done);
+      hideSetup();  // restoring an existing session — let it show
+      if (done) {
+        setStatus('status.prev_complete');
+      } else if (history.length === 0) {
+        await kickoff();
+      }
+      return;
+    }
+    localStorage.removeItem(SESSION_KEY);
+  }
+  // No saved session — show the setup screen instead of auto-creating
+  showSetup();
+}
+
+async function newSession(prefs = {}) {
+  const r = await fetch(api('/api/session'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(prefs || {}),
+    credentials: CRED,
+  });
+  const data = await r.json();
+  sessionId = data.id;
+  localStorage.setItem(SESSION_KEY, sessionId);
+  history = [];
+  setPhase('intro');
+  setSessionComplete(false);
+}
+
+function restoreLog(hist) {
+  if (typeof stopCueTimer === 'function') stopCueTimer();
+  log.innerHTML = '';
+  hist.forEach(m => {
+    if (m.role === 'user') {
+      if (/^hi,?\s*i'?m\s+ready\s+to\s+start\s+the\s+test/i.test(m.content)) return;
+      const txt = /^(feedback now|stop|end|exit)$/i.test(m.content.trim()) ? t('composer.end_chip') : m.content;
+      addMsg('you', 'you').textContent = txt;
+    } else {
+      const isFb = isFeedbackText(m.content);
+      const isCue = !isFb && isCueCardText(m.content);
+      const klass = isFb ? 'feedback' : (isCue ? 'cue-card' : 'examiner');
+      const b = addMsg('examiner', klass);
+      if (isFb) renderFeedback(b, m.content);
+      else if (isCue) renderCueCard(b, m.content);
+      else b.textContent = m.content;
+    }
+  });
+}
+
+//──────────── Chat ────────────
+async function sendUser(text) {
+  if (isStreaming) return;
+  if (FEEDBACK_TRIGGERS.test(text.trim().replace(/[.!?,]$/, ''))) {
+    pendingFeedback = true;
+  }
+  history.push({ role: 'user', content: text });
+  await streamExaminer(text);
+}
+
+async function streamExaminer(userText) {
+  if (!sessionId) await newSession();
+  stopCueTimer();   // any pending Part 2 timer ends when the next turn starts
+  isStreaming = true;
+  setStatus('status.thinking', 'thinking');
+  const bubble = addMsg('examiner', 'examiner');
+  bubble.classList.add('streaming');
+  let full = '';
+
+  try {
+    const r = await fetch(api('/api/chat'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ session_id: sessionId, user_message: userText || '' }),
+      credentials: CRED,
+    });
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop() || '';
+      for (const part of parts) {
+        const line = part.split('\n').find(l => l.startsWith('data: '));
+        if (!line) continue;
+        const data = JSON.parse(line.slice(6));
+        if (data.phase) { setPhase(data.phase, data.step); continue; }
+        if (data.error) {
+          const key = 'err.' + data.error;
+          const hasKey = (I18N[currentLang] && I18N[currentLang][key]) || I18N.en[key];
+          full = hasKey ? t(key, data.detail || '') : ('[error] ' + data.error);
+          bubble.textContent = full;
+          break;
+        }
+        if (data.done) break;
+        if (data.chunk) {
+          full += data.chunk;
+          bubble.textContent = full;
+          log.scrollTop = log.scrollHeight;
+        }
+        if (data.replace) {
+          // Server post-processed (e.g. anti-inflation clamp) and rewrote the full reply.
+          full = data.replace;
+          bubble.textContent = full;
+          log.scrollTop = log.scrollHeight;
+        }
+      }
+    }
+  } catch (e) {
+    full = '[fetch error] ' + e.message;
+    bubble.textContent = full;
+  }
+
+  bubble.classList.remove('streaming');
+  history.push({ role: 'assistant', content: full });
+
+  const isFeedback = pendingFeedback || isFeedbackText(full);
+  const isCue = !isFeedback && isCueCardText(full);
+  if (isFeedback) {
+    bubble.parentElement.classList.add('feedback');
+    renderFeedback(bubble, full);
+    setStatus('status.feedback_delivered');
+    pendingFeedback = false;
+    setSessionComplete(true);
+  } else if (isCue) {
+    bubble.parentElement.classList.add('cue-card');
+    renderCueCard(bubble, full);
+    speak(full);
+    startCueTimer();   // 1 min prep → 2 min talk
+  } else {
+    speak(full);
+  }
+  isStreaming = false;
+}
+
+//──────────── Buttons ────────────
+feedbackBtn.onclick = () => {
+  if (isStreaming) return;
+  addMsg('you', 'you').textContent = t('composer.end_chip');
+  sendUser('feedback now');
+};
+
+resetBtn.onclick = () => {
+  if (isStreaming) return;
+  speechSynthesis.cancel();
+  stopCueTimer();
+  pendingFeedback = false;
+  log.innerHTML = '';
+  history = [];
+  setSessionComplete(false);
+  setStatus('status.ready');
+  localStorage.removeItem(SESSION_KEY);
+  sessionId = null;
+  showSetup();
+};
+
+//──────────── Part 2 cue-card timer (1 min prep → 2 min talk) ────────────
+let _timerHandle = null;
+function _fmtTime(s) {
+  s = Math.max(0, Math.floor(s));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function stopCueTimer() {
+  if (_timerHandle) { clearInterval(_timerHandle); _timerHandle = null; }
+  document.querySelectorAll('.cue-timer').forEach(el => el.remove());
+}
+function _runCueTimer(panel, secs, mode, onDone) {
+  if (_timerHandle) clearInterval(_timerHandle);
+  let remaining = secs;
+  const total = secs;
+  const labelEl = panel.querySelector('.cue-timer-label-text');
+  const timeEl  = panel.querySelector('.cue-timer-time');
+  const fillEl  = panel.querySelector('.cue-timer-fill');
+  panel.classList.remove('warning', 'danger');
+  labelEl.textContent = t(mode === 'prep' ? 'cue_timer.prep_label' : 'cue_timer.talk_label');
+  timeEl.textContent = _fmtTime(remaining);
+  fillEl.style.transition = 'none';
+  fillEl.style.width = '100%';
+  // Force reflow then re-enable transition
+  void fillEl.offsetWidth;
+  fillEl.style.transition = 'width 1s linear, background 0.3s';
+  _timerHandle = setInterval(() => {
+    remaining--;
+    timeEl.textContent = _fmtTime(remaining);
+    fillEl.style.width = Math.max(0, remaining / total * 100) + '%';
+    if (remaining <= 10) panel.classList.add('danger');
+    else if (remaining <= 30) panel.classList.add('warning');
+    if (remaining <= 0) {
+      clearInterval(_timerHandle);
+      _timerHandle = null;
+      if (onDone) onDone();
+    }
+  }, 1000);
+}
+function startCueTimer() {
+  stopCueTimer();
+  // Attach after the most recent cue-card bubble
+  const cueBubble = log.querySelector('.msg.cue-card:last-of-type');
+  if (!cueBubble) return;
+  const panel = document.createElement('div');
+  panel.className = 'cue-timer';
+  panel.innerHTML = `
+    <div class="cue-timer-label">
+      <span class="cue-timer-label-text">${escapeHtml(t('cue_timer.prep_label'))}</span>
+      <span class="cue-timer-time">1:00</span>
+    </div>
+    <div class="cue-timer-bar"><div class="cue-timer-fill"></div></div>
+    <button class="nav-link js-prep-skip" type="button">${escapeHtml(t('cue_timer.skip'))}</button>
+  `;
+  cueBubble.after(panel);
+  log.scrollTop = log.scrollHeight;
+  // Phase 1: 60s prep
+  _runCueTimer(panel, 60, 'prep', () => _startTalk(panel));
+  panel.querySelector('.js-prep-skip').onclick = () => _startTalk(panel);
+}
+function _startTalk(panel) {
+  if (!panel || !document.body.contains(panel)) return;
+  // Convert button into Done
+  const btn = panel.querySelector('.js-prep-skip');
+  if (btn) {
+    btn.textContent = t('cue_timer.done');
+    btn.onclick = () => stopCueTimer();
+  }
+  _runCueTimer(panel, 120, 'talk', () => {
+    panel.classList.add('danger');
+    const labelEl = panel.querySelector('.cue-timer-label-text');
+    if (labelEl) labelEl.textContent = t('cue_timer.time_up');
+  });
+}
+
+//──────────── Setup screen (pre-test) ────────────
+let _topicsLoaded = false;
+async function loadTopics() {
+  if (_topicsLoaded) return;
+  try {
+    const r = await fetch(api('/api/topics'), { credentials: CRED });
+    if (!r.ok) return;
+    const data = await r.json();
+    // Keep the first "Random" option, drop the rest, then append topic options.
+    const random = setupTopic.querySelector('option[value=""]');
+    setupTopic.innerHTML = '';
+    if (random) setupTopic.appendChild(random);
+    // Prefer the new {value, label} shape; fall back to bare slug list.
+    const items = data.labelled || (data.topics || []).map(t => ({ value: t, label: t }));
+    items.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.label;
+      setupTopic.appendChild(opt);
+    });
+    _topicsLoaded = true;
+  } catch (_) {}
+}
+
+function showSetup() {
+  setupOverlay.classList.remove('hidden');
+  if (currentUser) {
+    setupName.value = currentUser.name || '';
+    setupBand.value = currentUser.target_band || '';
+    setupAccent.value = currentUser.accent || localStorage.getItem(RECOG_KEY) || 'en-GB';
+    setupTopic.value = currentUser.preferred_topic || '';
+  }
+  loadTopics().then(() => {
+    if (currentUser && currentUser.preferred_topic) setupTopic.value = currentUser.preferred_topic;
+  });
+  setTimeout(() => setupName.focus(), 80);
+}
+function hideSetup() { setupOverlay.classList.add('hidden'); }
+
+setupStart.onclick = async () => {
+  if (setupStart.disabled) return;
+  setupStart.disabled = true;
+  const origLabel = setupStart.textContent;
+  setupStart.textContent = t('setup.starting');
+  try {
+    const name = setupName.value.trim() || null;
+    const target_band = setupBand.value || null;
+    const accent = setupAccent.value || null;
+    const preferred_topic = setupTopic.value || null;
+    // Persist to user profile (best-effort)
+    try {
+      const patch = await fetch(api('/api/me'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, target_band, accent, preferred_topic }),
+        credentials: CRED,
+      });
+      if (patch.ok) {
+        currentUser = await patch.json();
+        paintUser();
+      }
+    } catch (_) {}
+    if (accent) {
+      recogLangSel.value = accent;
+      localStorage.setItem(RECOG_KEY, accent);
+    }
+    // Fresh transcript + new session with these prefs
+    history = [];
+    log.innerHTML = '';
+    setPhase('intro', null);
+    setSessionComplete(false);
+    pendingFeedback = false;
+    setStatus('status.ready');
+    await newSession({ target_band, accent, p1_topic: preferred_topic });
+    hideSetup();
+    await kickoff();
+  } finally {
+    setupStart.disabled = false;
+    setupStart.textContent = origLabel;
+  }
+};
+
+//──────────── Settings panel ────────────
+settingsBtn.onclick = openSettings;
+closeSettingsBtn.onclick = closeSettings;
+settingsPanel.addEventListener('click', e => { if (e.target === settingsPanel) closeSettings(); });
+function openSettings() {
+  settingsPanel.classList.remove('hidden');
+  settingsPanel.setAttribute('aria-hidden', 'false');
+}
+function closeSettings() {
+  settingsPanel.classList.add('hidden');
+  settingsPanel.setAttribute('aria-hidden', 'true');
+}
+
+//──────────── History panel ────────────
+historyBtn.onclick = openHistory;
+closeHistoryBtn.onclick = closeHistory;
+historyPanel.addEventListener('click', e => { if (e.target === historyPanel) closeHistory(); });
+
+function closeHistory() {
+  historyPanel.classList.add('hidden');
+  historyPanel.setAttribute('aria-hidden', 'true');
+}
+
+async function openHistory() {
+  historyPanel.classList.remove('hidden');
+  historyPanel.setAttribute('aria-hidden', 'false');
+  historyList.innerHTML = `<div class="history-empty">${escapeHtml(t('history.loading'))}</div>`;
+  try {
+    const r = await fetch(api('/api/sessions'), { credentials: CRED });
+    const list = await r.json();
+    renderHistoryList(list);
+  } catch (e) {
+    historyList.innerHTML = `<div class="history-empty">${escapeHtml(t('history.failed', e.message))}</div>`;
+  }
+}
+
+function renderHistoryList(list) {
+  if (!list.length) {
+    historyList.innerHTML = `<div class="history-empty">${escapeHtml(t('history.empty'))}</div>`;
+    return;
+  }
+  historyList.innerHTML = '';
+  list.forEach(s => {
+    const div = document.createElement('div');
+    div.className = 'history-row';
+    const when = new Date(s.updated_at * 1000).toLocaleString(currentLang === 'zh' ? 'zh-CN' : 'en-US');
+    const isCurrent = s.id === sessionId;
+    const meta = [];
+    meta.push(`<span class="badge ${s.status}">${escapeHtml(t('history.status.' + s.status))}</span>`);
+    meta.push(`<span class="badge">${escapeHtml(t('phase.' + s.phase))}</span>`);
+    meta.push(`<span class="badge">${s.examiner_turns} ${escapeHtml(t('history.q'))}</span>`);
+    if (s.band) meta.push(`<span class="badge band">${escapeHtml(t('history.band'))} ${s.band}</span>`);
+    if (isCurrent) meta.push(`<span class="badge current">${escapeHtml(t('history.current'))}</span>`);
+    div.innerHTML = `
+      <div class="row-main">
+        <div class="row-when">${escapeHtml(when)}</div>
+        <div class="row-meta">${meta.join('')}</div>
+      </div>
+      <div class="row-actions">
+        <button class="nav-link js-open" data-sid="${s.id}" ${isCurrent ? 'disabled' : ''}>${escapeHtml(t('history.open'))}</button>
+        <button class="nav-link danger js-del" data-sid="${s.id}">${escapeHtml(t('history.delete'))}</button>
+      </div>
+    `;
+    historyList.appendChild(div);
+  });
+  historyList.querySelectorAll('.js-open').forEach(b => {
+    b.onclick = () => switchSession(b.dataset.sid);
+  });
+  historyList.querySelectorAll('.js-del').forEach(b => {
+    b.onclick = async () => {
+      if (!confirm(t('history.delete.confirm'))) return;
+      const sid = b.dataset.sid;
+      const r = await fetch(api('/api/session/') + encodeURIComponent(sid), { method: 'DELETE', credentials: CRED });
+      if (r.ok) {
+        if (sid === sessionId) {
+          localStorage.removeItem(SESSION_KEY);
+          location.reload();
+          return;
+        }
+        openHistory();
+      }
+    };
+  });
+}
+
+function switchSession(sid) {
+  localStorage.setItem(SESSION_KEY, sid);
+  location.reload();
+}
+
+//──────────── Auth ────────────
+let currentUser = null;
+let authMode = 'login';
+
+function showAuthError(msg) { authError.textContent = msg; authError.classList.add('show'); }
+function clearAuthError() { authError.classList.remove('show'); authError.textContent = ''; }
+
+function setAuthMode(mode) {
+  authMode = mode;
+  authTabs.forEach(el => el.classList.toggle('active', el.dataset.mode === mode));
+  nameField.style.display = mode === 'signup' ? '' : 'none';
+  const submitKey = mode === 'signup' ? 'auth.submit.signup' : 'auth.submit.login';
+  authSubmit.dataset.i18n = submitKey;   // so applyI18n re-translates on lang switch
+  authSubmit.textContent = t(submitKey);
+  authPassword.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+  clearAuthError();
+}
+authTabs.forEach(el => el.onclick = () => setAuthMode(el.dataset.mode));
+
+// Phone input: keep digits only as the user types
+authPhone.addEventListener('input', () => {
+  const cleaned = authPhone.value.replace(/\D/g, '').slice(0, 11);
+  if (cleaned !== authPhone.value) authPhone.value = cleaned;
+});
+
+authForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearAuthError();
+  const phone = authPhone.value.replace(/\D/g, '');
+  const password = authPassword.value;
+  if (!phone || !password) { showAuthError(t('auth.error.required')); return; }
+  if (!/^1[3-9]\d{9}$/.test(phone)) { showAuthError(t('auth.error.phone_format')); return; }
+  if (authMode === 'signup' && password.length < 6) {
+    showAuthError(t('auth.error.password_short'));
+    return;
+  }
+  authSubmit.disabled = true;
+  const originalLabel = authSubmit.textContent;
+  authSubmit.textContent = t(authMode === 'signup' ? 'auth.submit.signing' : 'auth.submit.loginning');
+  try {
+    const body = authMode === 'signup'
+      ? { phone, password, name: authName.value.trim() }
+      : { phone, password };
+    const r = await fetch(api('/api/') + (authMode === 'signup' ? 'signup' : 'login'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: CRED,
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      // Server returns a stable error key in `detail`; map to localized text.
+      const key = err.detail;
+      const localized = key && I18N[currentLang]['err.' + key] ? t('err.' + key) : t('auth.error.generic');
+      showAuthError(localized);
+      return;
+    }
+    currentUser = await r.json();
+    paintUser();
+    hideAuth();
+    // Fresh login → drop any cached session id from a previous user
+    localStorage.removeItem(SESSION_KEY);
+    history = [];
+    log.innerHTML = '';
+    setPhase('intro', null);
+    await ensureSession();
+  } finally {
+    authSubmit.disabled = false;
+    authSubmit.textContent = originalLabel;
+  }
+});
+
+function paintUser() {
+  if (!currentUser) return;
+  const phone = currentUser.phone || '';
+  const handle = currentUser.name || (phone ? phone.slice(-4) : '?');
+  const initial = (handle || '?')[0].toUpperCase();
+  userAvatar.textContent = initial;
+  userName.textContent = handle;
+  userMenuEmail.textContent = phone || currentUser.name || '';
+  userBtn.style.display = '';
+}
+
+function showAuth() { authOverlay.classList.remove('hidden'); }
+function hideAuth() { authOverlay.classList.add('hidden'); }
+
+userBtn.onclick = (e) => {
+  e.stopPropagation();
+  userMenu.classList.toggle('hidden');
+};
+document.addEventListener('click', (e) => {
+  if (!userMenu.contains(e.target) && e.target !== userBtn && !userBtn.contains(e.target)) {
+    userMenu.classList.add('hidden');
+  }
+});
+logoutBtn.onclick = async () => {
+  await fetch(api('/api/logout'), { method: 'POST', credentials: CRED });
+  localStorage.removeItem(SESSION_KEY);
+  location.reload();
+};
+
+async function bootstrap() {
+  applyI18n();   // paint all data-i18n text in the chosen language before anything renders
+  try {
+    const r = await fetch(api('/api/me'), { credentials: CRED });
+    if (r.ok) {
+      currentUser = await r.json();
+      paintUser();
+      hideAuth();
+      await ensureSession();
+      return;
+    }
+  } catch (_) {}
+  showAuth();
+  setTimeout(() => authPhone.focus(), 50);
+}
+
+//──────────── Kickoff ────────────
+async function kickoff() {
+  const k = "Hi, I'm ready to start the test.";
+  history.push({ role: 'user', content: k });
+  await streamExaminer(k);
+}
+bootstrap();
+</script>
+</body>
+</html>

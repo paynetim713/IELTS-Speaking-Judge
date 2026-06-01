@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+hf_cache/
+.pdf_extract/
+sessions.db
+sessions.db-journal
+.secret_key
+.env
+.idea/
+*.pyc
+*.pyo
+speaking_raw.json
+.web_speaking.md
+新建 文本文档.txt

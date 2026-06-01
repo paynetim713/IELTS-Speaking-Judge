@@ -1,0 +1,40 @@
+# Render Blueprint — paste this file into a fresh GitHub repo and connect to
+# Render. Free tier: 750h/month total, services sleep after 15 min idle,
+# cold-start ~30s. For a hobby IELTS tester that's fine.
+#
+# Before first deploy, set the env vars marked `sync: false` in the Render dashboard
+# (Render won't read them from a public blueprint, by design):
+#   IELTS_SECRET_KEY  — `python -c "import secrets; print(secrets.token_hex(32))"`
+#   GROQ_API_KEY      — https://console.groq.com (free)
+#   DATABASE_URL      — Supabase Settings → Database → Connection string → URI
+#
+services:
+  - type: web
+    name: voice-ielts
+    runtime: python
+    plan: free
+    region: oregon            # change to singapore/frankfurt if closer to you
+    branch: main
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn webapp:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /healthz
+    envVars:
+      - key: IELTS_ENV
+        value: prod
+      - key: LLM_PROVIDER
+        value: groq
+      - key: LLM_EXAMINER_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LLM_FEEDBACK_MODEL
+        value: llama-3.3-70b-versatile
+      - key: CORS_ORIGINS
+        # Comma-separated. Add your Cloudflare Pages URL here once you have it.
+        # Leave empty to disable CORS and serve from the same Render origin.
+        value: ""
+      - key: IELTS_SECRET_KEY
+        sync: false           # set in dashboard, not in repo
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false

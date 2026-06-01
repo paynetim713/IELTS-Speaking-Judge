@@ -1,0 +1,12 @@
+# Pin to the versions known-good with the current code. Render's free-tier
+# Python build runs `pip install -r requirements.txt` on every deploy.
+fastapi==0.136.3
+uvicorn[standard]==0.48.0
+starlette==1.2.1
+pydantic==2.13.4
+requests==2.34.2
+bcrypt==5.0.0
+# Postgres driver — needed when DATABASE_URL=postgres://...; harmless when not.
+psycopg2-binary==2.9.10
+# Supabase client lib not required: we talk to Postgres directly through psycopg2.
+# Workers / cron, etc. not used yet.
