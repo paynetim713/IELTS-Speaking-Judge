@@ -151,14 +151,15 @@ def _openai_compat_stream(messages, *, model, temperature, timeout, provider):
         json=payload, headers=headers, stream=True, timeout=timeout,
     ) as r:
         if r.status_code >= 400:
-            # Surface the upstream error body in our logs — bare raise_for_status
-            # hides the JSON detail that says WHICH field DeepSeek/Groq objected to.
+            # Bare raise_for_status hides the JSON detail that says WHICH field
+            # was rejected. Pull the body and bake it into the exception so the
+            # SSE error event surfaces it to the client.
             try:
                 body = next(r.iter_content(8192, decode_unicode=True)) or ""
             except Exception:
                 body = "<unreadable>"
             print(f"[llm] {provider} {r.status_code}: {body[:500]}")
-            r.raise_for_status()
+            raise RuntimeError(f"{provider} {r.status_code}: {body[:300]}")
         for raw in r.iter_lines():
             if not raw:
                 continue
