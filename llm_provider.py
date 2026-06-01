@@ -45,13 +45,40 @@ def _default_model(provider: str, kind: str) -> str:
     if provider == "groq":
         return "llama-3.3-70b-versatile"
     if provider == "deepseek":
-        # R1 (reasoner) shines for grading; chat works fine for the examiner.
-        return "deepseek-reasoner" if kind == "feedback" else "deepseek-chat"
+        # v4-pro shines for grading (longer reasoning); v4-flash is the cheaper
+        # tier that fits the chattier examiner role.
+        return "deepseek-v4-pro" if kind == "feedback" else "deepseek-v4-flash"
     return "ielts-examiner" if kind == "examiner" else "qwen2.5:14b-instruct-q3_K_M"
 
 
-EXAMINER_MODEL = _env("LLM_EXAMINER_MODEL") or _default_model(PROVIDER, "examiner")
-FEEDBACK_MODEL = _env("LLM_FEEDBACK_MODEL") or _default_model(FEEDBACK_PROVIDER, "feedback")
+def _model_belongs_to(provider: str, model: str) -> bool:
+    """Heuristic: does `model` look like one the provider actually serves?
+    Used to catch stale env vars where someone changes LLM_FEEDBACK_PROVIDER
+    but forgets to also update LLM_FEEDBACK_MODEL."""
+    m = (model or "").lower()
+    if provider == "groq":
+        return "llama" in m or "mixtral" in m or "gemma" in m or "qwen" in m
+    if provider == "deepseek":
+        return m.startswith("deepseek")
+    return True  # ollama — anything goes
+
+
+def _resolve_model(env_var: str, provider: str, kind: str) -> str:
+    """Pick the env override only if it matches the provider; otherwise log
+    and fall back to the provider's default, so a stale env var can't take
+    down the deploy."""
+    explicit = _env(env_var)
+    if explicit and _model_belongs_to(provider, explicit):
+        return explicit
+    fallback = _default_model(provider, kind)
+    if explicit and explicit != fallback:
+        print(f"[llm] {env_var}={explicit!r} doesn't match provider={provider}; "
+              f"using {fallback!r} instead.")
+    return fallback
+
+
+EXAMINER_MODEL = _resolve_model("LLM_EXAMINER_MODEL", PROVIDER, "examiner")
+FEEDBACK_MODEL = _resolve_model("LLM_FEEDBACK_MODEL", FEEDBACK_PROVIDER, "feedback")
 
 
 def examiner_model() -> str:

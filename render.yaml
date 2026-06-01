@@ -26,8 +26,10 @@ services:
         value: groq
       - key: LLM_EXAMINER_MODEL
         value: llama-3.3-70b-versatile
-      - key: LLM_FEEDBACK_MODEL
-        value: llama-3.3-70b-versatile
+      # LLM_FEEDBACK_MODEL intentionally unset — llm_provider.py picks the
+      # right default for whichever provider LLM_FEEDBACK_PROVIDER points at.
+      # To split providers (Groq for examiner, DeepSeek for scoring):
+      #   set LLM_FEEDBACK_PROVIDER=deepseek + DEEPSEEK_API_KEY in dashboard.
       - key: CORS_ORIGINS
         # Comma-separated. Add your Cloudflare Pages URL here once you have it.
         # Leave empty to disable CORS and serve from the same Render origin.
