@@ -1020,6 +1020,7 @@ def healthz():
         "status": "ok",
         "env": IELTS_ENV,
         "llm_provider": llm_provider.PROVIDER,
+        "feedback_provider": llm_provider.FEEDBACK_PROVIDER,
         "db": _db_mod.kind(),
     }
 
