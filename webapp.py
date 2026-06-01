@@ -426,22 +426,34 @@ def _server_band_ranges(stats):
     """Compute defensible (low, high) band ranges for each criterion from objective signals.
     These become HARD bounds the model cannot escape — anti-inflation by construction."""
     awt = stats["avg_words"]
+    total = stats["total_words"]
+    longest = stats["longest_words"]
     dm = stats["discourse_markers"]
     ttr = stats["vocab_diversity"]
     asw = stats["avg_sentence_words"]
 
+    # Catastrophic engagement floor: candidate basically didn't engage with the
+    # test — one-word answers, monosyllabic refusals, refusing to talk. Maps to
+    # IELTS band 2-3 descriptors ("isolated words or memorised utterances",
+    # "frequently unable to convey basic message").
+    if total < 40 or awt < 5 or longest < 8:
+        floor = [2.0, 3.5]
+        return {"fc": tuple(floor), "lex": tuple(floor), "gram": tuple(floor),
+                "pron": (3.0, 4.5)}
+
     # F&C — drive by length, lifted by discourse markers
-    if   awt < 15: fc = [4.5, 5.5]
-    elif awt < 25: fc = [5.0, 6.0]
-    elif awt < 40: fc = [5.5, 6.0]
-    elif awt < 60: fc = [6.0, 6.5]
+    if   awt < 15: fc = [4.0, 5.0]
+    elif awt < 25: fc = [4.5, 5.5]
+    elif awt < 40: fc = [5.0, 6.0]
+    elif awt < 60: fc = [5.5, 6.5]
     elif awt < 90: fc = [6.0, 7.0]
     else:          fc = [6.5, 7.5]
     if dm >= 5:  fc[1] = min(fc[1] + 0.5, 7.5)
     if dm >= 10: fc[1] = min(fc[1] + 0.5, 8.0)
 
     # Lex — TTR only, with hard ceilings
-    if   ttr < 0.40: lex = [4.5, 5.5]
+    if   ttr < 0.35: lex = [4.0, 5.0]
+    elif ttr < 0.40: lex = [4.5, 5.5]
     elif ttr < 0.45: lex = [5.0, 6.0]
     elif ttr < 0.50: lex = [5.5, 6.0]
     elif ttr < 0.55: lex = [5.5, 6.5]
@@ -449,13 +461,16 @@ def _server_band_ranges(stats):
     else:            lex = [6.5, 7.5]
 
     # Gram — avg sentence length proxy
-    if   asw < 7:  gram = [4.5, 5.5]
+    if   asw < 5:  gram = [4.0, 5.0]
+    elif asw < 7:  gram = [4.5, 5.5]
     elif asw < 11: gram = [5.0, 6.0]
     elif asw < 15: gram = [5.5, 6.5]
     else:          gram = [6.0, 7.0]
 
-    # Pron — cannot judge from text; honest middle range
-    pron = [5.5, 6.5]
+    # Pron — text-only signal; range tightens for thin samples since we have
+    # less to go on. Real-exam Pron is one of four equal criteria, but a model
+    # judging from text alone shouldn't claim more confidence than it has.
+    pron = [5.0, 6.0] if total < 200 else [5.5, 6.5]
 
     return {"fc": tuple(fc), "lex": tuple(lex), "gram": tuple(gram), "pron": tuple(pron)}
 
