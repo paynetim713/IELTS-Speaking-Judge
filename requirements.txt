@@ -3,6 +3,10 @@
 fastapi==0.136.3
 uvicorn[standard]==0.48.0
 starlette==1.2.1
+# Cookie-signing backend for starlette's SessionMiddleware. starlette declares
+# it as an optional extra, so installing bare `starlette` doesn't pull it in —
+# the resulting ImportError only surfaces at app import time, not at install.
+itsdangerous==2.2.0
 pydantic==2.13.4
 requests==2.34.2
 bcrypt==5.0.0
