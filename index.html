@@ -4,6 +4,55 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>IELTS Speaking</title>
+<script>
+/* Early error catcher — must be plain ES5 so it loads even when the main script
+ * has a parse error (the whole point: surface the parse error on screen).
+ * iOS Safari is tolerant, but some Android browsers (older Samsung Internet,
+ * Chinese WebView wrappers) silently bail and leave the user with a frozen page.
+ */
+(function () {
+  var BANNER_ID = "_jsErrBanner";
+  function showErr(label, msg) {
+    try {
+      var el = document.getElementById(BANNER_ID);
+      if (!el) {
+        el = document.createElement("div");
+        el.id = BANNER_ID;
+        el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;"
+          + "background:#b91c1c;color:#fff;padding:12px 14px;font:13px/1.5 system-ui;"
+          + "white-space:pre-wrap;max-height:60vh;overflow:auto;box-shadow:0 2px 8px rgba(0,0,0,.4);";
+        document.body && document.body.appendChild(el);
+      }
+      el.textContent = (el.textContent ? el.textContent + "\n\n" : "")
+        + "[" + label + "] " + msg
+        + "\n\nUA: " + (navigator.userAgent || "?").slice(0, 200);
+    } catch (_) { /* nothing we can do */ }
+  }
+  window.addEventListener("error", function (e) {
+    showErr("JS error", (e.message || "?") + " @ " + (e.filename || "?") + ":" + (e.lineno || "?"));
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    var msg = "?";
+    try { msg = (e.reason && (e.reason.message || e.reason.toString())) || String(e.reason); } catch (_) {}
+    showErr("Promise rejected", msg);
+  });
+  // Quick feature sniff — if any of these are missing, the modern script will
+  // fail and we want to show that BEFORE the user starts clicking blindly.
+  document.addEventListener("DOMContentLoaded", function () {
+    var missing = [];
+    if (!window.fetch) missing.push("fetch");
+    if (!window.Promise) missing.push("Promise");
+    if (!Array.prototype.find) missing.push("Array.find");
+    // ?? operator: parse-check by eval (catches in old WebView)
+    try { /* eslint-disable */ Function("return null ?? 1")(); /* eslint-enable */ }
+    catch (e) { missing.push("?? operator"); }
+    if (missing.length) {
+      showErr("Browser too old", "Missing features: " + missing.join(", ")
+        + "\nUpgrade browser or switch to Chrome/Safari latest.");
+    }
+  });
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -860,6 +909,13 @@ footer {
       </div>
       <div class="settings-row">
         <div>
+          <div class="settings-label" data-i18n="settings.tts_browser">Use browser voice (offline)</div>
+          <div class="settings-hint" data-i18n="settings.tts_browser.hint">Off = use the natural neural voice from the server (recommended)</div>
+        </div>
+        <input type="checkbox" id="ttsBrowser">
+      </div>
+      <div class="settings-row">
+        <div>
           <div class="settings-label" data-i18n="settings.rate">Speech rate</div>
           <div class="settings-hint" data-i18n="settings.rate.hint">How fast the examiner speaks</div>
         </div>
@@ -1149,6 +1205,8 @@ const I18N = {
     'setup.favorites': '我的收藏',
     'setup.fav.add': '加入收藏',
     'setup.fav.remove': '取消收藏',
+    'settings.tts_browser': '用浏览器自带声音(离线)',
+    'settings.tts_browser.hint': '关 = 用服务端神经语音(推荐,更自然)',
     'err.bad_target_band': '目标分数值不合法',
     'err.bad_accent': '口音值不合法',
     'err.bad_topic': '主题值不合法',
@@ -1255,6 +1313,8 @@ const I18N = {
     'setup.favorites': 'Favorites',
     'setup.fav.add': 'Add to favorites',
     'setup.fav.remove': 'Remove from favorites',
+    'settings.tts_browser': 'Use browser voice (offline)',
+    'settings.tts_browser.hint': 'Off = use the natural neural voice from the server (recommended)',
     'err.bad_target_band': 'Invalid target band value.',
     'err.bad_accent': 'Invalid accent value.',
     'err.bad_topic': 'Invalid topic value.',
@@ -1592,13 +1652,78 @@ document.addEventListener('pointerdown', primeAudio, { capture: true, passive: t
 document.addEventListener('touchstart', primeAudio, { capture: true, passive: true });
 document.addEventListener('keydown', primeAudio, { capture: true });
 
-function speak(text) {
+// Currently-playing server-TTS <audio>. Tracking it lets us stop overlapping
+// utterances when the user moves on.
+let _serverAudio = null;
+
+function stopAllSpeech() {
+  if (_serverAudio) {
+    try { _serverAudio.pause(); _serverAudio.src = ''; } catch (_) {}
+    _serverAudio = null;
+  }
+  try {
+    if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+  } catch (_) {}
+}
+
+// Pick the right server-TTS voice for the candidate's chosen accent + sex.
+function serverTtsVoiceParam() {
+  const accent = (recogLangSel && recogLangSel.value) || 'en-GB';  // candidate's accent
+  // Examiner sex: re-use the existing browser voice picker's hint, default to female.
+  const v = currentVoice && currentVoice();
+  const isMale = v && /(Ryan|George|Daniel|Mark|William|Prabhat|Brian|Guy)/i.test(v.name || '');
+  return accent + (isMale ? '-male' : '-female');
+}
+
+async function speakViaServer(text) {
+  // Returns true on success (audio actually started playing), false to let the
+  // caller fall back to browser SpeechSynthesis.
+  return new Promise((resolve) => {
+    try {
+      stopAllSpeech();
+      const url = api('/api/tts') + '?voice=' + encodeURIComponent(serverTtsVoiceParam())
+        + '&rate=' + encodeURIComponent(currentRate() >= 1 ? '+' + Math.round((currentRate()-1)*100) + '%'
+                                                            : Math.round((currentRate()-1)*100) + '%')
+        + '&text=' + encodeURIComponent(text);
+      const a = new Audio(url);
+      a.preload = 'auto';
+      _serverAudio = a;
+      let resolved = false;
+      a.onplay = () => { ttsLog('server TTS onplay'); setStatus('status.speaking', 'speaking'); };
+      a.onended = () => { ttsLog('server TTS onended'); if (_serverAudio === a) _serverAudio = null; setStatus('status.ready'); };
+      a.onerror = () => { ttsLog('server TTS onerror — falling back'); if (!resolved) { resolved = true; resolve(false); } };
+      // If playback hasn't started after 1.2s, fall back.
+      const fbTimer = setTimeout(() => {
+        if (!resolved && a.paused) { ttsLog('server TTS timeout — falling back'); resolved = true; resolve(false); }
+      }, 1200);
+      a.play().then(() => {
+        clearTimeout(fbTimer);
+        if (!resolved) { resolved = true; resolve(true); }
+      }).catch((e) => {
+        clearTimeout(fbTimer);
+        ttsLog('server TTS play() rejected: ' + (e && e.message));
+        if (!resolved) { resolved = true; resolve(false); }
+      });
+    } catch (e) {
+      ttsLog('server TTS threw: ' + e.message);
+      resolve(false);
+    }
+  });
+}
+
+async function speak(text) {
   if (!ttsOnEl.checked) { ttsLog('TTS toggle OFF'); return; }
   const clean = stripForSpeech(text);
   if (!clean) { ttsLog('empty after strip'); return; }
-
-  // On iOS, calling cancel() can leave the synth in a paused state that
-  // ignores future speak()s. Guard with .speaking/.pending check + resume().
+  // Try server TTS first — way more natural than browser voices.
+  // If it works, we're done. If it errors / times out, fall back to browser.
+  const useServer = !document.getElementById('ttsBrowser')
+    || !document.getElementById('ttsBrowser').checked;
+  if (useServer) {
+    const ok = await speakViaServer(clean);
+    if (ok) return;
+  }
+  // Browser-TTS fallback (or user-forced via the "Use browser voice" toggle)
   if (speechSynthesis.speaking || speechSynthesis.pending) {
     ttsLog('cancel() prior utterance');
     speechSynthesis.cancel();
@@ -1661,7 +1786,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (!historyPanel.classList.contains('hidden')) { closeHistory(); return; }
     if (!settingsPanel.classList.contains('hidden')) { closeSettings(); return; }
-    speechSynthesis.cancel(); setStatus('status.ready');
+    stopAllSpeech(); setStatus('status.ready');
   }
 });
 
@@ -1673,7 +1798,7 @@ if (!SR) {
 
 function startRecognition() {
   if (isRecording || !SR) return;
-  speechSynthesis.cancel();
+  stopAllSpeech();
 
   recognition = new SR();
   recognition.lang = recogLangSel.value || 'en-GB';
@@ -1900,7 +2025,7 @@ feedbackBtn.onclick = () => {
 
 resetBtn.onclick = () => {
   if (isStreaming) return;
-  speechSynthesis.cancel();
+  stopAllSpeech();
   stopCueTimer();
   pendingFeedback = false;
   log.innerHTML = '';

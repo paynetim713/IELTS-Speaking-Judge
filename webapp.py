@@ -1152,6 +1152,60 @@ def list_feedback(token: str = "", limit: int = 100):
     }
 
 
+# ── Server-side TTS (Microsoft Edge neural voices, free, no key) ──────────
+# Replaces the robotic SpeechSynthesis when reachable. Streams MP3 back to the
+# client; the browser plays it via an <audio> element. Falls back to browser
+# TTS if this endpoint errors out (e.g. edge-tts upstream rate-limited).
+_TTS_VOICES = {
+    "en-GB-female": "en-GB-SoniaNeural",
+    "en-GB-male":   "en-GB-RyanNeural",
+    "en-US-female": "en-US-JennyNeural",
+    "en-US-male":   "en-US-GuyNeural",
+    "en-AU-female": "en-AU-NatashaNeural",
+    "en-AU-male":   "en-AU-WilliamNeural",
+    "en-IN-female": "en-IN-NeerjaNeural",
+    "en-IN-male":   "en-IN-PrabhatNeural",
+}
+_DEFAULT_TTS_VOICE = "en-GB-SoniaNeural"
+
+
+@app.get("/api/tts")
+async def synthesize_tts(text: str = "", voice: str = "", rate: str = "+0%"):
+    """Stream MP3 audio for `text` via Microsoft Edge neural TTS. Rate is a
+    percent string like '-10%' or '+20%' that edge-tts accepts directly."""
+    text = (text or "").strip()
+    if not text:
+        raise HTTPException(400, "text_required")
+    if len(text) > 2000:
+        raise HTTPException(400, "text_too_long")
+    # Voice can be a friendly alias ("en-GB-female") OR an exact edge-tts voice id.
+    vname = _TTS_VOICES.get(voice) or (voice if voice and "Neural" in voice else _DEFAULT_TTS_VOICE)
+    # Validate rate format defensively (don't let arbitrary user input into the CLI).
+    if not re.fullmatch(r"[+\-]\d{1,3}%", rate or ""):
+        rate = "+0%"
+
+    import edge_tts  # lazy import; keeps module load fast on Render cold-start
+
+    async def stream():
+        try:
+            communicate = edge_tts.Communicate(text, vname, rate=rate)
+            async for chunk in communicate.stream():
+                if chunk.get("type") == "audio" and chunk.get("data"):
+                    yield chunk["data"]
+        except Exception as e:
+            # Streaming has already started, but we can at least surface in logs.
+            print(f"[tts] edge-tts failed: {e}")
+
+    return StreamingResponse(
+        stream(),
+        media_type="audio/mpeg",
+        headers={
+            "Cache-Control": "public, max-age=86400",  # examiner questions repeat
+            "X-TTS-Voice": vname,
+        },
+    )
+
+
 @app.get("/api/topics")
 def get_topics():
     """Topics the setup screen can offer. Returns both legacy `topics` (slugs only,

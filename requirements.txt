@@ -12,5 +12,9 @@ requests==2.34.2
 bcrypt==5.0.0
 # Postgres driver — needed when DATABASE_URL=postgres://...; harmless when not.
 psycopg2-binary==2.9.10
+# Server-side TTS: Microsoft Edge neural voices (free, no API key required).
+# Replaces the robotic browser SpeechSynthesis with a neural voice when /api/tts
+# is reachable; falls back to browser TTS otherwise.
+edge-tts==7.2.8
 # Supabase client lib not required: we talk to Postgres directly through psycopg2.
 # Workers / cron, etc. not used yet.
