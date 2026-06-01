@@ -1,15 +1,15 @@
 # IELTS Speaking Judge
 
 <p align="center">
-  <a href="README.md"><img src="https://img.shields.io/badge/English-README-blue?style=for-the-badge" alt="English"></a>
-  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/%E4%B8%AD%E6%96%87-README-red?style=for-the-badge" alt="中文"></a>
-  <a href="README.ar.md"><img src="https://img.shields.io/badge/%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9-README-green?style=for-the-badge" alt="العربية"></a>
+  <strong>تدرّب على IELTS Speaking من المتصفح مع ممتحن ذكاء اصطناعي، توقيت قريب من الاختبار الحقيقي، وتغذية راجعة عملية بعد الجلسة.</strong>
 </p>
 
-<div dir="rtl">
+<h3 align="center">اختر اللغة</h3>
 
 <p align="center">
-  <strong>نظام محاكاة لاختبار IELTS Speaking باستخدام الذكاء الاصطناعي، مع ممتحن صوتي مباشر وتقييم مرتبط بمعايير الدرجات.</strong>
+  <a href="README.md"><img src="https://img.shields.io/badge/English-README-1f6feb?style=for-the-badge&labelColor=0d1117" alt="English README"></a>
+  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/%E4%B8%AD%E6%96%87-README-1f6feb?style=for-the-badge&labelColor=0d1117" alt="中文 README"></a>
+  <a href="README.ar.md"><img src="https://img.shields.io/badge/%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9-README-1f6feb?style=for-the-badge&labelColor=0d1117" alt="Arabic README"></a>
 </p>
 
 <p align="center">
@@ -21,33 +21,41 @@
 
 ---
 
-## نبذة عن المشروع
+<div dir="rtl">
 
-**IELTS Speaking Judge** هو نظام يحاكي اختبار المحادثة في IELTS باستخدام الذكاء الاصطناعي.
+## لماذا تم بناء هذا المشروع
 
-يشمل النظام:
+تم بناء **IELTS Speaking Judge** لأن كثيرًا من أدوات تدريب المحادثة تبدو ذكية، لكنها لا تشبه اختبار IELTS Speaking الحقيقي.
+
+بعض الأدوات تطرح أسئلة عشوائية فقط، وبعضها يعطي درجة بدون شرح واضح، وبعضها لا يحاكي ضغط الجزء الثاني، حيث يحتاج المتقدم إلى التحضير خلال دقيقة واحدة ثم التحدث لمدة دقيقتين. لذلك يحاول هذا المشروع جعل التدريب أقرب إلى تجربة الاختبار الفعلية، وليس مجرد محادثة عادية مع روبوت.
+
+المشروع مناسب للمتعلمين الذين يريدون التدريب بمفردهم، إعادة الجلسات، وفهم كيف يمكن تحسين إجاباتهم خطوة بخطوة.
+
+## ماذا يفعل المشروع
+
+يحاكي التطبيق تدفق IELTS Speaking الكامل:
 
 - **المقدمة**: يحيي الممتحن المتقدم ويسأله عن اسمه
-- **الجزء الأول**: 4 أسئلة شخصية حول موضوع مألوف
-- **الجزء الثاني**: بطاقة موضوع مع دقيقة واحدة للتحضير ودقيقتين للإجابة
-- **الجزء الثالث**: 5 أسئلة رأي مرتبطة بموضوع الجزء الثاني
-- **التقييم**: تقرير تقييم باللغة الصينية اعتمادًا على معايير IELTS، مع إعادة صياغة بعض الإجابات إلى مستوى أعلى
+- **الجزء الأول**: أسئلة قصيرة وشخصية حول موضوع مألوف
+- **الجزء الثاني**: بطاقة موضوع مع دقيقة واحدة للتحضير ودقيقتين للتحدث
+- **الجزء الثالث**: أسئلة متابعة أكثر تجريدًا مرتبطة بموضوع الجزء الثاني
+- **التقييم**: تقرير مبني على مستوى IELTS، مع أمثلة من إجابات المتقدم وإعادة صياغة أقوى لبعض الجمل
 
-يتم التعرف على الصوت وتحويل النص إلى صوت داخل المتصفح، لذلك لا يتم إرسال الصوت إلى الخادم الخلفي.
+يتم التعرف على الصوت وتشغيل الكلام داخل المتصفح باستخدام Web Speech API، لذلك لا يحتاج الخادم الخلفي إلى استقبال أو تخزين الصوت الخام.
 
-## المميزات
+## أبرز المميزات
 
-- 71 موضوعًا للجزء الأول
-- 61 بطاقة للجزء الثاني
-- 61 مجموعة موضوعات للجزء الثالث
-- اختيار ثابت للأسئلة لكل جلسة
-- مؤقت مزدوج للجزء الثاني: 60 ثانية للتحضير و120 ثانية للإجابة
-- دعم Ollama محليًا أو Groq سحابيًا
-- دعم SQLite محليًا وPostgres في الإنتاج
+- 71 موضوعًا للجزء الأول، 61 بطاقة للجزء الثاني، و61 مجموعة موضوعات للجزء الثالث
+- اختيار الأسئلة مرتبط بالجلسة، مما يجعل مراجعة الجلسة لاحقًا أسهل
+- مؤقت مدمج للجزء الثاني: وقت للتحضير ووقت للتحدث
+- التغذية الراجعة مبنية على IELTS band descriptors، وليست مجرد درجة عشوائية من الذكاء الاصطناعي
+- دعم **Ollama** للتشغيل المحلي ودعم **Groq** للتشغيل السحابي
+- استخدام **SQLite** للتطوير المحلي و **Postgres** عند النشر
+- واجهة أمامية في ملف واحد، لذلك من السهل تشغيل المشروع وفهم بنيته
 
 ## التشغيل المحلي
 
-يتطلب المشروع **Python 3.12+**.
+تحتاج إلى **Python 3.12+**.
 
 </div>
 
@@ -64,7 +72,7 @@ pip install -r requirements.txt
 
 <div dir="rtl">
 
-### الخيار A: استخدام Ollama محليًا
+### الخيار A: التشغيل محليًا باستخدام Ollama
 
 </div>
 
@@ -76,7 +84,7 @@ uvicorn webapp:app --port 8000
 
 <div dir="rtl">
 
-### الخيار B: استخدام Groq سحابيًا
+### الخيار B: التشغيل باستخدام Groq
 
 </div>
 
@@ -104,34 +112,40 @@ http://127.0.0.1:8000
 
 ```text
 .
-├── webapp.py                    # FastAPI backend
-├── llm_provider.py              # Ollama / Groq abstraction
-├── db.py                        # SQLite / Postgres abstraction
-├── question_bank.py             # IELTS question bank
-├── build_bank.py                # Question bank builder
-├── extract_speaking.py          # PDF extraction tool
-├── cambridge_manual.json        # Manually collected questions
-├── Modelfile.ielts-examiner     # Ollama model file
-├── index.html                   # Frontend page
+├── webapp.py                    # FastAPI backend: auth, sessions, chat stream
+├── llm_provider.py              # Ollama / Groq provider wrapper
+├── db.py                        # SQLite / Postgres database wrapper
+├── question_bank.py             # IELTS Speaking question bank
+├── build_bank.py                # Rebuilds the generated question bank
+├── extract_speaking.py          # Extracts speaking questions from PDFs
+├── cambridge_manual.json        # Manually collected Cambridge questions
+├── Modelfile.ielts-examiner     # Ollama examiner prompt
+├── index.html                   # Browser frontend
 ├── requirements.txt             # Python dependencies
 ├── render.yaml                  # Render deployment config
-└── DEPLOY.md                    # Deployment guide
+└── DEPLOY.md                    # Deployment notes
 ```
 
 <div dir="rtl">
 
-## متغيرات البيئة
+## الإعدادات
 
-راجع [`.env.example`](.env.example) للحصول على القائمة الكاملة.
+راجع [`.env.example`](.env.example) لمعرفة جميع الخيارات المتاحة.
 
-| المتغير | الوصف |
+| المتغير | الغرض |
 |---|---|
-| `LLM_PROVIDER` | `ollama` أو `groq` |
-| `OLLAMA_URL` | عنوان خدمة Ollama |
-| `GROQ_API_KEY` | مفتاح Groq API |
-| `DATABASE_URL` | رابط قاعدة البيانات |
+| `LLM_PROVIDER` | اختيار `ollama` أو `groq` |
+| `OLLAMA_URL` | رابط خادم Ollama |
+| `GROQ_API_KEY` | مطلوب عند استخدام Groq |
+| `DATABASE_URL` | رابط الاتصال بقاعدة البيانات |
 | `IELTS_SECRET_KEY` | مفتاح توقيع Cookie |
 | `CORS_ORIGINS` | مصادر الواجهة الأمامية المسموح بها |
+
+## ملاحظات
+
+هذا المشروع أداة تدريبية، وليس نظام تقييم رسمي لاختبار IELTS. الهدف منه هو مساعدة المتعلم على ملاحظة الأخطاء المتكررة، تحسين الإجابات، والتدرب داخل تدفق أقرب للاختبار الحقيقي.
+
+قد تختلف جودة التعرف على الصوت حسب المتصفح، الميكروفون، اللهجة، وبيئة الشبكة.
 
 ## شكر وتقدير
 
@@ -141,6 +155,6 @@ http://127.0.0.1:8000
 - Groq
 - Supabase
 
-> هذا المشروع مخصص للتدريب على اختبار IELTS فقط، وليس تابعًا رسميًا لـ Cambridge University Press أو IDP IELTS أو British Council.
+> هذا المشروع مخصص للمساعدة في التحضير لاختبار IELTS، وليس تابعًا رسميًا لـ Cambridge University Press أو IDP IELTS أو British Council.
 
 </div>
