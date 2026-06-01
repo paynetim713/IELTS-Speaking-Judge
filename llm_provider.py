@@ -150,7 +150,15 @@ def _openai_compat_stream(messages, *, model, temperature, timeout, provider):
         f"{base_url}/chat/completions",
         json=payload, headers=headers, stream=True, timeout=timeout,
     ) as r:
-        r.raise_for_status()
+        if r.status_code >= 400:
+            # Surface the upstream error body in our logs — bare raise_for_status
+            # hides the JSON detail that says WHICH field DeepSeek/Groq objected to.
+            try:
+                body = next(r.iter_content(8192, decode_unicode=True)) or ""
+            except Exception:
+                body = "<unreadable>"
+            print(f"[llm] {provider} {r.status_code}: {body[:500]}")
+            r.raise_for_status()
         for raw in r.iter_lines():
             if not raw:
                 continue
