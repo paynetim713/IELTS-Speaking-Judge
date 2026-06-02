@@ -21,6 +21,11 @@ import time
 
 import requests
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+except Exception:
+    pass
+
 BASE = "https://voice-ielts.onrender.com"
 PHONE = "13900000099"
 PASSWORD = "livetest123"
