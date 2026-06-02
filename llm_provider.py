@@ -124,14 +124,15 @@ def _alternate_provider(primary: str) -> str | None:
     return None
 
 
-def _stream_one(messages, *, model, temperature, num_ctx, timeout, provider):
+def _stream_one(messages, *, model, temperature, num_ctx, timeout, provider, for_feedback):
     if provider == "ollama":
         yield from _ollama_stream(
             messages, model=model, temperature=temperature, num_ctx=num_ctx, timeout=timeout
         )
     else:
         yield from _openai_compat_stream(
-            messages, model=model, temperature=temperature, timeout=timeout, provider=provider
+            messages, model=model, temperature=temperature, timeout=timeout,
+            provider=provider, for_feedback=for_feedback,
         )
 
 
@@ -159,7 +160,8 @@ def chat_stream(
     # Probe-and-buffer the first chunk so we can detect 429 before the caller
     # starts consuming tokens.
     gen = _stream_one(messages, model=model, temperature=temperature,
-                      num_ctx=num_ctx, timeout=timeout, provider=primary)
+                      num_ctx=num_ctx, timeout=timeout, provider=primary,
+                      for_feedback=for_feedback)
     try:
         first = next(gen)
     except StopIteration:
@@ -173,6 +175,7 @@ def chat_stream(
             yield from _stream_one(
                 messages, model=alt_model, temperature=temperature,
                 num_ctx=num_ctx, timeout=timeout, provider=fallback,
+                for_feedback=for_feedback,
             )
             return
         raise
@@ -203,8 +206,13 @@ def _ollama_stream(messages, *, model, temperature, num_ctx, timeout):
                 break
 
 
-def _openai_compat_stream(messages, *, model, temperature, timeout, provider):
-    """OpenAI-format SSE — works for Groq, DeepSeek, and OpenAI itself."""
+def _openai_compat_stream(messages, *, model, temperature, timeout, provider, for_feedback=False):
+    """OpenAI-format SSE — works for Groq, DeepSeek, and OpenAI itself.
+
+    for_feedback controls reasoning_content handling: feedback turns get the
+    chain-of-thought wrapped in <think>...</think> (the SSE strip layer then
+    removes it before the user sees anything). Examiner turns drop reasoning
+    entirely — otherwise the live chat fills with tiny <think>X</think> chunks."""
     if provider == "groq":
         base_url, api_key = GROQ_BASE_URL, GROQ_API_KEY
         if not api_key:
@@ -249,15 +257,15 @@ def _openai_compat_stream(messages, *, model, temperature, timeout, provider):
             if not choices:
                 continue
             delta = choices[0].get("delta") or {}
-            # DeepSeek R1 streams reasoning in delta.reasoning_content separately
-            # from delta.content. We pass both through — webapp.py strips <think>
-            # blocks before showing the user, and reasoning is wrapped in <think>
-            # only when it comes from .content. For R1's separate reasoning_content
-            # field we wrap it ourselves so the strip catches it.
             piece = delta.get("content") or ""
-            reasoning = delta.get("reasoning_content") or ""
-            if reasoning and not piece:
-                piece = f"<think>{reasoning}</think>"
+            # DeepSeek v4 streams chain-of-thought in delta.reasoning_content,
+            # separate from delta.content. For feedback we keep it (wrapped so
+            # the post-stream <think> strip catches it). For examiner turns
+            # we drop it — those go straight to the user, no strip layer.
+            if for_feedback and not piece:
+                reasoning = delta.get("reasoning_content") or ""
+                if reasoning:
+                    piece = f"<think>{reasoning}</think>"
             done = choices[0].get("finish_reason") is not None
             if piece:
                 yield (piece, done)
