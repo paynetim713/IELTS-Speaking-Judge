@@ -209,10 +209,13 @@ def _ollama_stream(messages, *, model, temperature, num_ctx, timeout):
 def _openai_compat_stream(messages, *, model, temperature, timeout, provider, for_feedback=False):
     """OpenAI-format SSE — works for Groq, DeepSeek, and OpenAI itself.
 
-    for_feedback controls reasoning_content handling: feedback turns get the
-    chain-of-thought wrapped in <think>...</think> (the SSE strip layer then
-    removes it before the user sees anything). Examiner turns drop reasoning
-    entirely — otherwise the live chat fills with tiny <think>X</think> chunks."""
+    DeepSeek v4 surfaces chain-of-thought in two different places depending on
+    the model:
+      - v4-pro: in a separate `delta.reasoning_content` field
+      - v4-flash: inline inside `delta.content` as <think>...</think> blocks
+    For examiner turns we filter both away. Feedback turns keep them (wrapped
+    in <think>) so the post-stream _strip_think_blocks() picks them up before
+    the Chinese report ever reaches the user."""
     if provider == "groq":
         base_url, api_key = GROQ_BASE_URL, GROQ_API_KEY
         if not api_key:
@@ -239,6 +242,47 @@ def _openai_compat_stream(messages, *, model, temperature, timeout, provider, fo
                 body = "<unreadable>"
             print(f"[llm] {provider} {r.status_code}: {body[:500]}")
             raise RuntimeError(f"{provider} {r.status_code}: {body[:300]}")
+        # Cross-chunk <think>...</think> stripper for examiner turns.
+        # State carries between iterations because the open and close tags can
+        # land in different SSE events (esp. on v4-flash where each reasoning
+        # token is its own self-contained chunk).
+        in_think = False
+        carry = ""
+
+        def _strip_think_chunk(text: str) -> str:
+            nonlocal in_think, carry
+            out_parts = []
+            buf = carry + text
+            carry = ""
+            while buf:
+                if in_think:
+                    end = buf.find("</think>")
+                    if end < 0:
+                        # Hold the tail — `</think>` may straddle two chunks.
+                        carry = buf[-8:] if len(buf) >= 8 else buf
+                        buf = ""
+                        break
+                    buf = buf[end + len("</think>"):]
+                    in_think = False
+                else:
+                    start = buf.find("<think>")
+                    if start < 0:
+                        # Same protective tail check for `<think>` opening.
+                        if buf.endswith("<") or buf.endswith("<t") or buf.endswith("<th") \
+                                or buf.endswith("<thi") or buf.endswith("<thin") \
+                                or buf.endswith("<think"):
+                            tail_len = len(buf) - buf.rfind("<")
+                            carry = buf[-tail_len:]
+                            out_parts.append(buf[:-tail_len])
+                        else:
+                            out_parts.append(buf)
+                        buf = ""
+                        break
+                    out_parts.append(buf[:start])
+                    buf = buf[start + len("<think>"):]
+                    in_think = True
+            return "".join(out_parts)
+
         for raw in r.iter_lines():
             if not raw:
                 continue
@@ -258,14 +302,17 @@ def _openai_compat_stream(messages, *, model, temperature, timeout, provider, fo
                 continue
             delta = choices[0].get("delta") or {}
             piece = delta.get("content") or ""
-            # DeepSeek v4 streams chain-of-thought in delta.reasoning_content,
-            # separate from delta.content. For feedback we keep it (wrapped so
-            # the post-stream <think> strip catches it). For examiner turns
-            # we drop it — those go straight to the user, no strip layer.
-            if for_feedback and not piece:
-                reasoning = delta.get("reasoning_content") or ""
-                if reasoning:
-                    piece = f"<think>{reasoning}</think>"
+            if for_feedback:
+                # Feedback path: forward reasoning_content too, wrapped so the
+                # downstream _strip_think_blocks() catches it after streaming.
+                if not piece:
+                    reasoning = delta.get("reasoning_content") or ""
+                    if reasoning:
+                        piece = f"<think>{reasoning}</think>"
+            else:
+                # Examiner path: drop reasoning_content outright AND strip any
+                # <think>...</think> that snuck into .content (v4-flash does this).
+                piece = _strip_think_chunk(piece) if piece else ""
             done = choices[0].get("finish_reason") is not None
             if piece:
                 yield (piece, done)
