@@ -114,6 +114,27 @@ def embed_system_prompt(messages: list[dict], kind: str) -> list[dict]:
     return [{"role": "system", "content": _BASE_SYSTEM_PROMPT}] + messages
 
 
+def _alternate_provider(primary: str) -> str | None:
+    """If the primary cloud provider rate-limits, who can we try instead?
+    Only returns a provider we actually have credentials for."""
+    if primary == "groq" and DEEPSEEK_API_KEY:
+        return "deepseek"
+    if primary == "deepseek" and GROQ_API_KEY:
+        return "groq"
+    return None
+
+
+def _stream_one(messages, *, model, temperature, num_ctx, timeout, provider):
+    if provider == "ollama":
+        yield from _ollama_stream(
+            messages, model=model, temperature=temperature, num_ctx=num_ctx, timeout=timeout
+        )
+    else:
+        yield from _openai_compat_stream(
+            messages, model=model, temperature=temperature, timeout=timeout, provider=provider
+        )
+
+
 def chat_stream(
     messages: list[dict],
     *,
@@ -124,16 +145,39 @@ def chat_stream(
     for_feedback: bool = False,
 ) -> Generator[tuple[str, bool], None, None]:
     """Yield (chunk_text, done_flag) for each streamed token. done_flag is True
-    only on the final yield. for_feedback routes to LLM_FEEDBACK_PROVIDER."""
-    provider = FEEDBACK_PROVIDER if for_feedback else PROVIDER
-    if provider == "ollama":
-        yield from _ollama_stream(
-            messages, model=model, temperature=temperature, num_ctx=num_ctx, timeout=timeout
-        )
-    else:
-        yield from _openai_compat_stream(
-            messages, model=model, temperature=temperature, timeout=timeout, provider=provider
-        )
+    only on the final yield. for_feedback routes to LLM_FEEDBACK_PROVIDER.
+
+    On a primary-provider 429 (rate-limited BEFORE any token is streamed) the
+    call transparently retries against the alternate provider — Groq's free
+    100k-tokens/day quota is tight enough that we'd otherwise lock users out
+    until UTC midnight. The fallback only fires if no chunks have been yielded
+    yet so the user never sees a duplicate or partial reply.
+    """
+    primary = FEEDBACK_PROVIDER if for_feedback else PROVIDER
+    fallback = _alternate_provider(primary) if primary != "ollama" else None
+
+    # Probe-and-buffer the first chunk so we can detect 429 before the caller
+    # starts consuming tokens.
+    gen = _stream_one(messages, model=model, temperature=temperature,
+                      num_ctx=num_ctx, timeout=timeout, provider=primary)
+    try:
+        first = next(gen)
+    except StopIteration:
+        return
+    except RuntimeError as e:
+        msg = str(e)
+        if fallback and (" 429" in msg or " 503" in msg or " 502" in msg):
+            kind = "feedback" if for_feedback else "examiner"
+            alt_model = _default_model(fallback, kind)
+            print(f"[llm] {primary} {msg.split(':')[1].strip()[:30]} — falling back to {fallback} ({alt_model})")
+            yield from _stream_one(
+                messages, model=alt_model, temperature=temperature,
+                num_ctx=num_ctx, timeout=timeout, provider=fallback,
+            )
+            return
+        raise
+    yield first
+    yield from gen
 
 
 def _ollama_stream(messages, *, model, temperature, num_ctx, timeout):
